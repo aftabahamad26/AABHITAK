@@ -1,5 +1,4 @@
-// News Aggregator JavaScript
-// Main application class to handle all functionality
+
 
 class NewsAggregator {
     constructor() {
@@ -13,24 +12,21 @@ class NewsAggregator {
         this.init();
     }
 
-    // Initialize the application
     init() {
         this.setupEventListeners();
         this.applySettings();
         this.fetchNews();
     }
 
-    // Setup all event listeners
     setupEventListeners() {
-        // Settings sidebar
+     
         document.getElementById('settingsBtn').addEventListener('click', () => this.toggleSettings());
         document.getElementById('closeSettings').addEventListener('click', () => this.toggleSettings());
         document.getElementById('overlay').addEventListener('click', () => this.toggleSettings());
 
-        // Theme toggle
+    
         document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
 
-        // Search functionality
         const searchInput = document.getElementById('searchInput');
         searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
         document.getElementById('clearSearch').addEventListener('click', () => this.clearSearch());
@@ -106,28 +102,65 @@ class NewsAggregator {
         this.showLoading(true);
         
         try {
-            // Check if API key is configured
-            if (!CONFIG.NEWS_API_KEY || CONFIG.NEWS_API_KEY === 'YOUR_NEWS_API_KEY') {
+            // If no client key and proxy not set, we cannot call NewsAPI
+            if (!CONFIG.NEWS_API_PROXY_URL && (!CONFIG.NEWS_API_KEY || CONFIG.NEWS_API_KEY === 'YOUR_NEWS_API_KEY')) {
                 throw new Error('API_KEY_NOT_CONFIGURED');
             }
             
-            // Test API key first
-            const isAPIValid = await this.testAPIKey();
-            if (!isAPIValid) {
-                throw new Error('INVALID_API_KEY');
+            // Optional: Test API key (do not block main attempts on CORS/network issues)
+            try {
+                await this.testAPIKey();
+            } catch (precheckError) {
+                console.warn('API key precheck failed, will still attempt main requests:', precheckError);
             }
             
-            // Try NewsAPI.org first (priority)
+            // Try proxy endpoint first if configured (best for CORS and security)
+            if (CONFIG.NEWS_API_PROXY_URL) {
+                try {
+                    console.log('🌐 Trying configured proxy endpoint...');
+                    const proxyEndpointUrl = `${CONFIG.NEWS_API_PROXY_URL}?country=${CONFIG.NEWS_API_COUNTRY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}`;
+                    const proxyEndpointResp = await fetch(proxyEndpointUrl, { headers: { 'Accept': 'application/json' } });
+                    console.log('📡 Configured proxy response status:', proxyEndpointResp.status);
+                    if (!proxyEndpointResp.ok) {
+                        const errorText = await proxyEndpointResp.text();
+                        throw new Error(`Configured proxy HTTP error ${proxyEndpointResp.status}: ${errorText}`);
+                    }
+                    const proxyEndpointData = await proxyEndpointResp.json();
+                    if (proxyEndpointData.status === 'error') {
+                        throw new Error(proxyEndpointData.message || 'Configured proxy API error');
+                    }
+                    this.newsData = proxyEndpointData.articles.map((article, index) => ({
+                        id: index + 1,
+                        title: article.title || 'No title available',
+                        description: article.description || 'No description available',
+                        url: article.url || '#',
+                        urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                        source: { name: article.source?.name || 'Unknown Source' },
+                        publishedAt: article.publishedAt || new Date().toISOString(),
+                        category: this.categorizeArticle(article.title, article.description)
+                    }));
+                    this.filteredNews = [...this.newsData];
+                    this.renderNews();
+                    if (CONFIG.SHOW_API_ERRORS) {
+                        this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news via configured proxy!`);
+                    }
+                    return;
+                } catch (configuredProxyErr) {
+                    console.error('Configured proxy failed, will try direct NewsAPI and public proxies:', configuredProxyErr);
+                }
+            }
+
+            // Try NewsAPI.org (priority when CORS allows)
             let response;
             try {
                 console.log('🔍 Trying NewsAPI.org...');
                 // Try direct API call first
-                response = await fetch(`${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&apiKey=${CONFIG.NEWS_API_KEY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}`, {
+                const url = `${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}`;
+                response = await fetch(url, {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'NewsAggregator/1.0'
+                        'X-Api-Key': CONFIG.NEWS_API_KEY
                     }
                 });
                 
@@ -171,10 +204,11 @@ class NewsAggregator {
             } catch (error) {
                 console.error('❌ NewsAPI failed, trying CORS proxy:', error);
                 
-                // Try CORS proxy as fallback
+                // Try CORS proxies as fallbacks
                 try {
                     console.log('🌐 Trying CORS proxy...');
-                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&apiKey=${CONFIG.NEWS_API_KEY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}`)}`;
+                    const proxiedUrl = `${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}&apiKey=${encodeURIComponent(CONFIG.NEWS_API_KEY)}`;
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(proxiedUrl)}`;
                     response = await fetch(proxyUrl);
                     
                     console.log('📡 CORS proxy response status:', response.status);
@@ -185,7 +219,16 @@ class NewsAggregator {
                         throw new Error(`CORS proxy error! status: ${response.status}`);
                     }
                     
-                    const data = await response.json();
+                    // AllOrigins 'raw' returns the raw body. Some instances proxy JSON without CORS headers.
+                    // If JSON parse fails, try to parse manually when content-type is text/plain.
+                    let dataText = await response.text();
+                    let data;
+                    try {
+                        data = JSON.parse(dataText);
+                    } catch (_) {
+                        console.warn('AllOrigins returned non-JSON; attempting fallback parsing');
+                        data = {};
+                    }
                     console.log('📊 CORS proxy data received:', data.status, 'articles:', data.articles?.length);
                     
                     if (data.status === 'error') {
@@ -215,11 +258,111 @@ class NewsAggregator {
                     return;
                     
                 } catch (proxyError) {
-                    console.error('❌ CORS proxy also failed:', proxyError);
-                    throw error; // Throw original error for RSS fallback
+                    console.error('❌ CORS proxy failed:', proxyError);
+                    // Try a second proxy before giving up
+                    try {
+                        console.log('🌐 Trying secondary CORS proxy...');
+                        const secondProxyUrl = `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(proxiedUrl)}`;
+                        response = await fetch(secondProxyUrl);
+
+                        console.log('📡 Secondary proxy response status:', response.status);
+
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error('❌ Secondary proxy error:', response.status, errorText);
+                            throw new Error(`Secondary proxy error! status: ${response.status}`);
+                        }
+
+                        let dataText2 = await response.text();
+                        let data;
+                        try {
+                            data = JSON.parse(dataText2);
+                        } catch (_) {
+                            console.warn('Secondary proxy returned non-JSON; attempting fallback parsing');
+                            data = {};
+                        }
+                        console.log('📊 Secondary proxy data received:', data.status, 'articles:', data.articles?.length);
+
+                        if (data.status === 'error') {
+                            console.error('❌ Secondary proxy API error:', data.message);
+                            throw new Error(data.message || 'API Error');
+                        }
+
+                        this.newsData = data.articles.map((article, index) => ({
+                            id: index + 1,
+                            title: article.title || 'No title available',
+                            description: article.description || 'No description available',
+                            url: article.url || '#',
+                            urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                            source: { name: article.source?.name || 'Unknown Source' },
+                            publishedAt: article.publishedAt || new Date().toISOString(),
+                            category: this.categorizeArticle(article.title, article.description)
+                        }));
+
+                        this.filteredNews = [...this.newsData];
+                        this.renderNews();
+
+                        if (CONFIG.SHOW_API_ERRORS) {
+                            this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news articles via secondary CORS proxy!`);
+                        }
+                        return;
+                    } catch (secondProxyError) {
+                        console.error('❌ Secondary proxy also failed:', secondProxyError);
+                        // Try a third public proxy
+                        try {
+                            console.log('🌐 Trying tertiary CORS proxy...');
+                            const thirdProxyUrl = `https://corsproxy.io/?${encodeURIComponent(proxiedUrl)}`;
+                            response = await fetch(thirdProxyUrl);
+
+                            console.log('📡 Tertiary proxy response status:', response.status);
+
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                console.error('❌ Tertiary proxy error:', response.status, errorText);
+                                throw new Error(`Tertiary proxy error! status: ${response.status}`);
+                            }
+
+                            let dataText3 = await response.text();
+                            let data;
+                            try {
+                                data = JSON.parse(dataText3);
+                            } catch (_) {
+                                console.warn('Tertiary proxy returned non-JSON; attempting fallback parsing');
+                                data = {};
+                            }
+
+                            if (data.status === 'error') {
+                                console.error('❌ Tertiary proxy API error:', data.message);
+                                throw new Error(data.message || 'API Error');
+                            }
+
+                            this.newsData = data.articles.map((article, index) => ({
+                                id: index + 1,
+                                title: article.title || 'No title available',
+                                description: article.description || 'No description available',
+                                url: article.url || '#',
+                                urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                                source: { name: article.source?.name || 'Unknown Source' },
+                                publishedAt: article.publishedAt || new Date().toISOString(),
+                                category: this.categorizeArticle(article.title, article.description)
+                            }));
+
+                            this.filteredNews = [...this.newsData];
+                            this.renderNews();
+
+                            if (CONFIG.SHOW_API_ERRORS) {
+                                this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news via tertiary CORS proxy!`);
+                            }
+                            return;
+                        } catch (thirdProxyError) {
+                            console.error('❌ Tertiary proxy also failed:', thirdProxyError);
+                            // Fall through to RSS fallback handled below in catch block
+                            throw error;
+                        }
+                    }
                 }
             }
-            
+        } catch (error) {
             // Fallback to RSS feed
             try {
                 const rssResponse = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/rss.xml');
@@ -254,6 +397,7 @@ class NewsAggregator {
             }
             
             // Handle different error types
+            if (error && typeof error.message === 'string') {
             if (error.message === 'API_KEY_NOT_CONFIGURED') {
                 this.showError('Please configure your NewsAPI key in config.js to fetch real news. Using demo data instead.');
             } else if (error.message === 'INVALID_API_KEY') {
@@ -264,6 +408,9 @@ class NewsAggregator {
                 this.showError('API rate limit exceeded. Using demo data instead.');
             } else {
                 this.showError(`Failed to load real-time news: ${error.message}. Using demo data instead.`);
+                }
+            } else {
+                this.showError('Failed to load real-time news. Using demo data instead.');
             }
             
             // Use mock data as fallback
@@ -273,7 +420,6 @@ class NewsAggregator {
                 this.filteredNews = [...this.newsData];
                 this.renderNews();
             }
-            
         } finally {
             this.showLoading(false);
         }
@@ -487,9 +633,8 @@ class NewsAggregator {
     handleCategoryFilter(category) {
         // Update active button
         document.querySelectorAll('.category-btn').forEach(btn => {
-            btn.classList.remove('active');
+            btn.classList.toggle('active', btn.dataset.category === category);
         });
-        event.target.classList.add('active');
         
         this.currentCategory = category;
         this.filterNews();
@@ -560,9 +705,8 @@ class NewsAggregator {
         
         // Update active button
         document.querySelectorAll('.layout-btn').forEach(btn => {
-            btn.classList.remove('active');
+            btn.classList.toggle('active', btn.dataset.layout === layout);
         });
-        event.target.classList.add('active');
         
         // Update container class
         const container = document.getElementById('newsContainer');
