@@ -1,7 +1,6 @@
 const CONFIG = {
     NEWS_API_KEY: '',
     NEWS_API_URL: 'https://newsapi.org/v2/top-headlines',
-
     NEWS_API_PROXY_URL: 'https://aabhitak.onrender.com/api/news',
     NEWS_API_COUNTRY: 'us',
     ARTICLES_PER_PAGE: 100,

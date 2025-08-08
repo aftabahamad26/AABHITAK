@@ -134,6 +134,39 @@ class NewsAggregator {
                     }));
                     this.filteredNews = [...this.newsData];
                     this.renderNews();
+
+                    // Enrich if too few articles by querying 'everything' for latest headlines
+                    if (this.newsData.length < 20 && CONFIG.NEWS_API_PROXY_URL) {
+                        try {
+                            const enrichUrl = `${CONFIG.NEWS_API_PROXY_URL}?mode=everything&q=${encodeURIComponent('breaking OR latest OR trending')}&language=en&pageSize=${Math.max(20, 100 - this.newsData.length)}`;
+                            const enrichResp = await fetch(enrichUrl, { headers: { 'Accept': 'application/json' } });
+                            if (enrichResp.ok) {
+                                const enrichData = await enrichResp.json();
+                                if (Array.isArray(enrichData.articles) && enrichData.articles.length > 0) {
+                                    const startIndex = this.newsData.length;
+                                    const moreArticles = enrichData.articles.map((article, i) => ({
+                                        id: startIndex + i + 1,
+                                        title: article.title || 'No title available',
+                                        description: article.description || 'No description available',
+                                        url: article.url || '#',
+                                        urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                                        source: { name: article.source?.name || 'Unknown Source' },
+                                        publishedAt: article.publishedAt || new Date().toISOString(),
+                                        category: this.categorizeArticle(article.title, article.description)
+                                    }));
+                                    this.newsData = [...this.newsData, ...moreArticles];
+                                    this.filteredNews = [...this.newsData];
+                                    this.renderNews();
+                                    if (CONFIG.SHOW_API_ERRORS) {
+                                        this.showSuccessMessage(`✅ Enriched with ${moreArticles.length} more recent articles`);
+                                    }
+                                }
+                            }
+                        } catch (enrichError) {
+                            console.warn('Enrichment via everything failed:', enrichError);
+                        }
+                    }
+
                     if (CONFIG.SHOW_API_ERRORS) {
                         this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news via configured proxy!`);
                     }
@@ -655,10 +688,12 @@ class NewsAggregator {
 
 
     createNewsCard(article) {
-        const publishedDate = new Date(article.publishedAt).toLocaleDateString('en-US', {
+        const publishedDate = new Date(article.publishedAt).toLocaleString('en-US', {
             year: 'numeric',
             month: 'short',
-            day: 'numeric'
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
         });
 
         return `
