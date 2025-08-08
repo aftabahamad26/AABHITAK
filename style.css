@@ -40,6 +40,24 @@ body {
     justify-content: space-between;
 }
 
+/* Header navigation */
+.header-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+    margin-left: 0;
+}
+
+.header-nav a {
+    color: var(--text-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.header-nav a:hover {
+    color: var(--primary-color);
+}
+
 .logo {
     display: flex;
     align-items: center;
@@ -47,10 +65,20 @@ body {
     font-size: var(--font-size-large);
     font-weight: 600;
     color: var(--primary-color);
+    text-decoration: none;
 }
 
 .logo i {
     font-size: 24px;
+}
+
+/* Ensure the logo link is never underlined in any state */
+.logo:link,
+.logo:visited,
+.logo:hover,
+.logo:active {
+    text-decoration: none;
+    color: var(--primary-color);
 }
 
 .header-controls {
@@ -529,9 +557,20 @@ body {
     color: var(--primary-color);
 }
 
+/* Smaller copyright text */
+.footer-content p {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
 @media (max-width: 768px) {
     .header-content {
         padding: 0 var(--spacing-sm);
+    }
+
+    .header-nav {
+        gap: var(--spacing-sm);
+        margin-left: 0;
     }
 
     .logo h1 {
