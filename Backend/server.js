@@ -10,7 +10,7 @@ app.get('/api/news', async (req, res) => {
 
     const mode = (req.query.mode || 'top-headlines').toString();
     const country = (req.query.country || 'us').toString();
-    const pageSize = (req.query.pageSize || '100').toString();
+    const pageSize = (req.query.pageSize || '1000').toString();
     const language = (req.query.language || 'en').toString();
     const query = (req.query.q || 'news').toString();
 

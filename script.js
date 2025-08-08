@@ -8,7 +8,7 @@ class NewsAggregator {
         this.searchQuery = '';
         this.currentLayout = 'grid';
         this.settings = this.loadSettings();
-
+        
         this.init();
     }
 
@@ -63,7 +63,7 @@ class NewsAggregator {
 
         const fontSizeSlider = document.getElementById('fontSize');
         const fontSizeValue = document.getElementById('fontSizeValue');
-
+        
         fontSizeSlider.addEventListener('input', (e) => {
             const size = e.target.value;
             fontSizeValue.textContent = `${size}px`;
@@ -74,7 +74,7 @@ class NewsAggregator {
     async testAPIKey() {
         try {
             const testResponse = await fetch(`${CONFIG.NEWS_API_URL}?country=us&apiKey=${CONFIG.NEWS_API_KEY}&pageSize=1`);
-
+            
             if (testResponse.ok) {
                 const testData = await testResponse.json();
                 if (testData.status === 'ok') {
@@ -95,13 +95,13 @@ class NewsAggregator {
 
     async fetchNews() {
         this.showLoading(true);
-
+        
         try {
 
             if (!CONFIG.NEWS_API_PROXY_URL && (!CONFIG.NEWS_API_KEY || CONFIG.NEWS_API_KEY === 'YOUR_NEWS_API_KEY')) {
                 throw new Error('API_KEY_NOT_CONFIGURED');
             }
-
+            
             try {
                 await this.testAPIKey();
             } catch (precheckError) {
@@ -134,6 +134,65 @@ class NewsAggregator {
                     }));
                     this.filteredNews = [...this.newsData];
                     this.renderNews();
+
+                    // Enrich results if the list is small: try category bundle, then 'everything'
+                    if (this.newsData.length < 40 && CONFIG.NEWS_API_PROXY_URL) {
+                        try {
+                            const remaining = Math.max(20, 100 - this.newsData.length);
+                            // 1) Bundle across categories to increase volume and diversity
+                            const bundleUrl = `${CONFIG.NEWS_API_PROXY_URL}?mode=bundle&country=${CONFIG.NEWS_API_COUNTRY}&pageSize=${remaining}&categories=business,technology,sports,entertainment,health,science`;
+                            const bundleResp = await fetch(bundleUrl, { headers: { 'Accept': 'application/json' } });
+                            if (bundleResp.ok) {
+                                const bundleData = await bundleResp.json();
+                                if (Array.isArray(bundleData.articles) && bundleData.articles.length > 0) {
+                                    const startIndex = this.newsData.length;
+                                    const moreFromBundle = bundleData.articles.map((article, i) => ({
+                                        id: startIndex + i + 1,
+                                        title: article.title || 'No title available',
+                                        description: article.description || 'No description available',
+                                        url: article.url || '#',
+                                        urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                                        source: { name: article.source?.name || 'Unknown Source' },
+                                        publishedAt: article.publishedAt || new Date().toISOString(),
+                                        category: this.categorizeArticle(article.title, article.description)
+                                    }));
+                                    this.newsData = [...this.newsData, ...moreFromBundle];
+                                    this.filteredNews = [...this.newsData];
+                                    this.renderNews();
+                                }
+                            }
+
+                            // 2) If still low, query 'everything' for freshest items
+                            if (this.newsData.length < 40) {
+                                const enrichUrl = `${CONFIG.NEWS_API_PROXY_URL}?mode=everything&q=${encodeURIComponent('breaking OR latest OR trending')}&language=en&pageSize=${Math.max(20, 100 - this.newsData.length)}`;
+                                const enrichResp = await fetch(enrichUrl, { headers: { 'Accept': 'application/json' } });
+                                if (enrichResp.ok) {
+                                    const enrichData = await enrichResp.json();
+                                    if (Array.isArray(enrichData.articles) && enrichData.articles.length > 0) {
+                                        const startIndex2 = this.newsData.length;
+                                        const more = enrichData.articles.map((article, i) => ({
+                                            id: startIndex2 + i + 1,
+                                            title: article.title || 'No title available',
+                                            description: article.description || 'No description available',
+                                            url: article.url || '#',
+                                            urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                                            source: { name: article.source?.name || 'Unknown Source' },
+                                            publishedAt: article.publishedAt || new Date().toISOString(),
+                                            category: this.categorizeArticle(article.title, article.description)
+                                        }));
+                                        this.newsData = [...this.newsData, ...more];
+                                        this.filteredNews = [...this.newsData];
+                                        this.renderNews();
+                                        if (CONFIG.SHOW_API_ERRORS) {
+                                            this.showSuccessMessage(`✅ Enriched with ${more.length} additional articles`);
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (enrichError) {
+                            console.warn('Enrichment failed:', enrichError);
+                        }
+                    }
 
                     // Enrich if too few articles by querying 'everything' for latest headlines
                     if (this.newsData.length < 20 && CONFIG.NEWS_API_PROXY_URL) {
@@ -187,23 +246,23 @@ class NewsAggregator {
                         'X-Api-Key': CONFIG.NEWS_API_KEY
                     }
                 });
-
+                
                 console.log('📡 NewsAPI response status:', response.status);
-
+                
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('❌ NewsAPI HTTP error:', response.status, errorText);
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-
+                
                 const data = await response.json();
                 console.log('📊 NewsAPI data received:', data.status, 'articles:', data.articles?.length);
-
+                
                 if (data.status === 'error') {
                     console.error('❌ NewsAPI error:', data.message);
                     throw new Error(data.message || 'API Error');
                 }
-
+                
                 this.newsData = data.articles.map((article, index) => ({
                     id: index + 1,
                     title: article.title || 'No title available',
@@ -214,26 +273,26 @@ class NewsAggregator {
                     publishedAt: article.publishedAt || new Date().toISOString(),
                     category: this.categorizeArticle(article.title, article.description)
                 }));
-
+                
                 this.filteredNews = [...this.newsData];
                 this.renderNews();
-
+                
                 if (CONFIG.SHOW_API_ERRORS) {
                     this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news articles from NewsAPI.org!`);
                 }
                 return;
-
+                
             } catch (error) {
                 console.error('❌ NewsAPI failed, trying CORS proxy:', error);
-
+                
                 try {
                     console.log('🌐 Trying CORS proxy...');
                     const proxiedUrl = `${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}&apiKey=${encodeURIComponent(CONFIG.NEWS_API_KEY)}`;
                     const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(proxiedUrl)}`;
                     response = await fetch(proxyUrl);
-
+                    
                     console.log('📡 CORS proxy response status:', response.status);
-
+                    
                     if (!response.ok) {
                         const errorText = await response.text();
                         console.error('❌ CORS proxy error:', response.status, errorText);
@@ -248,12 +307,12 @@ class NewsAggregator {
                         data = {};
                     }
                     console.log('📊 CORS proxy data received:', data.status, 'articles:', data.articles?.length);
-
+                    
                     if (data.status === 'error') {
                         console.error('❌ CORS proxy API error:', data.message);
                         throw new Error(data.message || 'API Error');
                     }
-
+                    
                     this.newsData = data.articles.map((article, index) => ({
                         id: index + 1,
                         title: article.title || 'No title available',
@@ -264,15 +323,15 @@ class NewsAggregator {
                         publishedAt: article.publishedAt || new Date().toISOString(),
                         category: this.categorizeArticle(article.title, article.description)
                     }));
-
+                    
                     this.filteredNews = [...this.newsData];
                     this.renderNews();
-
+                    
                     if (CONFIG.SHOW_API_ERRORS) {
                         this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news articles via CORS proxy!`);
                     }
                     return;
-
+                    
                 } catch (proxyError) {
                     console.error('❌ CORS proxy failed:', proxyError);
                     try {
@@ -380,10 +439,10 @@ class NewsAggregator {
 
             try {
                 const rssResponse = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/rss.xml');
-
+                
                 if (rssResponse.ok) {
                     const rssData = await rssResponse.json();
-
+                    
                     if (rssData.status === 'ok' && rssData.items) {
 
                         this.newsData = rssData.items.map((item, index) => ({
@@ -396,10 +455,10 @@ class NewsAggregator {
                             publishedAt: item.pubDate || new Date().toISOString(),
                             category: this.categorizeArticle(item.title, item.description)
                         }));
-
+                        
                         this.filteredNews = [...this.newsData];
                         this.renderNews();
-
+                        
                         if (CONFIG.SHOW_API_ERRORS) {
                             this.showSuccessMessage(`📰 Loaded ${this.newsData.length} articles from BBC RSS feed (NewsAPI failed)`);
                         }
@@ -409,24 +468,24 @@ class NewsAggregator {
             } catch (rssError) {
                 console.error('RSS feed also failed:', rssError);
             }
-
+            
 
             if (error && typeof error.message === 'string') {
-                if (error.message === 'API_KEY_NOT_CONFIGURED') {
-                    this.showError('Please configure your NewsAPI key in config.js to fetch real news. Using demo data instead.');
-                } else if (error.message === 'INVALID_API_KEY') {
-                    this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
-                } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-                    this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
-                } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
-                    this.showError('API rate limit exceeded. Using demo data instead.');
-                } else {
-                    this.showError(`Failed to load real-time news: ${error.message}. Using demo data instead.`);
+            if (error.message === 'API_KEY_NOT_CONFIGURED') {
+                this.showError('Please configure your NewsAPI key in config.js to fetch real news. Using demo data instead.');
+            } else if (error.message === 'INVALID_API_KEY') {
+                this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
+            } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+                this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
+            } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+                this.showError('API rate limit exceeded. Using demo data instead.');
+            } else {
+                this.showError(`Failed to load real-time news: ${error.message}. Using demo data instead.`);
                 }
             } else {
                 this.showError('Failed to load real-time news. Using demo data instead.');
             }
-
+            
 
             if (CONFIG.USE_MOCK_DATA_AS_FALLBACK) {
                 const mockNews = this.getMockNewsData();
@@ -442,55 +501,55 @@ class NewsAggregator {
 
     categorizeArticle(title, description) {
         const content = (title + ' ' + description).toLowerCase();
+        
 
-
-        if (content.includes('business') || content.includes('market') || content.includes('economy') ||
+        if (content.includes('business') || content.includes('market') || content.includes('economy') || 
             content.includes('finance') || content.includes('stock') || content.includes('investment') ||
             content.includes('banking') || content.includes('trading') || content.includes('wall street') ||
             content.includes('earnings') || content.includes('revenue') || content.includes('profit') ||
             content.includes('ceo') || content.includes('company') || content.includes('corporate')) {
             return 'business';
-        }
+        } 
 
-        else if (content.includes('tech') || content.includes('ai') || content.includes('artificial intelligence') ||
-            content.includes('software') || content.includes('digital') || content.includes('computer') ||
-            content.includes('internet') || content.includes('social media') || content.includes('app') ||
-            content.includes('startup') || content.includes('innovation') || content.includes('cyber') ||
-            content.includes('data') || content.includes('algorithm') || content.includes('platform')) {
+        else if (content.includes('tech') || content.includes('ai') || content.includes('artificial intelligence') || 
+                 content.includes('software') || content.includes('digital') || content.includes('computer') ||
+                 content.includes('internet') || content.includes('social media') || content.includes('app') ||
+                 content.includes('startup') || content.includes('innovation') || content.includes('cyber') ||
+                 content.includes('data') || content.includes('algorithm') || content.includes('platform')) {
             return 'technology';
-        }
+        } 
 
-        else if (content.includes('sport') || content.includes('football') || content.includes('basketball') ||
-            content.includes('tennis') || content.includes('olympic') || content.includes('baseball') ||
-            content.includes('soccer') || content.includes('golf') || content.includes('hockey') ||
-            content.includes('championship') || content.includes('league') || content.includes('team') ||
-            content.includes('player') || content.includes('coach') || content.includes('game')) {
+        else if (content.includes('sport') || content.includes('football') || content.includes('basketball') || 
+                 content.includes('tennis') || content.includes('olympic') || content.includes('baseball') ||
+                 content.includes('soccer') || content.includes('golf') || content.includes('hockey') ||
+                 content.includes('championship') || content.includes('league') || content.includes('team') ||
+                 content.includes('player') || content.includes('coach') || content.includes('game')) {
             return 'sports';
-        }
+        } 
 
-        else if (content.includes('movie') || content.includes('film') || content.includes('entertainment') ||
-            content.includes('celebrity') || content.includes('music') || content.includes('actor') ||
-            content.includes('actress') || content.includes('director') || content.includes('award') ||
-            content.includes('concert') || content.includes('album') || content.includes('show') ||
-            content.includes('tv') || content.includes('television') || content.includes('streaming')) {
+        else if (content.includes('movie') || content.includes('film') || content.includes('entertainment') || 
+                 content.includes('celebrity') || content.includes('music') || content.includes('actor') ||
+                 content.includes('actress') || content.includes('director') || content.includes('award') ||
+                 content.includes('concert') || content.includes('album') || content.includes('show') ||
+                 content.includes('tv') || content.includes('television') || content.includes('streaming')) {
             return 'entertainment';
-        }
+        } 
 
-        else if (content.includes('health') || content.includes('medical') || content.includes('covid') ||
-            content.includes('vaccine') || content.includes('treatment') || content.includes('hospital') ||
-            content.includes('doctor') || content.includes('patient') || content.includes('disease') ||
-            content.includes('medicine') || content.includes('therapy') || content.includes('clinic') ||
-            content.includes('surgery') || content.includes('drug') || content.includes('pharmaceutical')) {
+        else if (content.includes('health') || content.includes('medical') || content.includes('covid') || 
+                 content.includes('vaccine') || content.includes('treatment') || content.includes('hospital') ||
+                 content.includes('doctor') || content.includes('patient') || content.includes('disease') ||
+                 content.includes('medicine') || content.includes('therapy') || content.includes('clinic') ||
+                 content.includes('surgery') || content.includes('drug') || content.includes('pharmaceutical')) {
             return 'health';
-        }
+        } 
 
-        else if (content.includes('science') || content.includes('research') || content.includes('study') ||
-            content.includes('discovery') || content.includes('climate') || content.includes('environment') ||
-            content.includes('space') || content.includes('nasa') || content.includes('university') ||
-            content.includes('experiment') || content.includes('laboratory') || content.includes('scientist') ||
-            content.includes('innovation') || content.includes('breakthrough') || content.includes('analysis')) {
+        else if (content.includes('science') || content.includes('research') || content.includes('study') || 
+                 content.includes('discovery') || content.includes('climate') || content.includes('environment') ||
+                 content.includes('space') || content.includes('nasa') || content.includes('university') ||
+                 content.includes('experiment') || content.includes('laboratory') || content.includes('scientist') ||
+                 content.includes('innovation') || content.includes('breakthrough') || content.includes('analysis')) {
             return 'science';
-        }
+        } 
 
         else {
             return 'general';
@@ -504,7 +563,7 @@ class NewsAggregator {
         yesterday.setDate(currentDate.getDate() - 1);
         const twoDaysAgo = new Date(currentDate);
         twoDaysAgo.setDate(currentDate.getDate() - 2);
-
+        
         return [
             {
                 id: 1,
@@ -649,7 +708,7 @@ class NewsAggregator {
         document.querySelectorAll('.category-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.category === category);
         });
-
+        
         this.currentCategory = category;
         this.filterNews();
     }
@@ -657,13 +716,13 @@ class NewsAggregator {
 
     filterNews() {
         this.filteredNews = this.newsData.filter(article => {
-            const matchesCategory = this.currentCategory === 'all' ||
-                article.category === this.currentCategory;
-
+            const matchesCategory = this.currentCategory === 'all' || 
+                                  article.category === this.currentCategory;
+            
             const matchesSearch = this.searchQuery === '' ||
-                article.title.toLowerCase().includes(this.searchQuery) ||
-                article.description.toLowerCase().includes(this.searchQuery);
-
+                                article.title.toLowerCase().includes(this.searchQuery) ||
+                                article.description.toLowerCase().includes(this.searchQuery);
+            
             return matchesCategory && matchesSearch;
         });
 
@@ -674,7 +733,7 @@ class NewsAggregator {
     renderNews() {
         const container = document.getElementById('newsContainer');
         const noResults = document.getElementById('noResults');
-
+        
         if (this.filteredNews.length === 0) {
             container.innerHTML = '';
             noResults.style.display = 'block';
@@ -682,7 +741,7 @@ class NewsAggregator {
         }
 
         noResults.style.display = 'none';
-
+        
         container.innerHTML = this.filteredNews.map(article => this.createNewsCard(article)).join('');
     }
 
@@ -718,25 +777,25 @@ class NewsAggregator {
 
     handleLayoutChange(layout) {
         this.currentLayout = layout;
-
+        
 
         document.querySelectorAll('.layout-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.layout === layout);
         });
-
+        
 
         const container = document.getElementById('newsContainer');
         container.classList.toggle('list-view', layout === 'list');
-
+        
         this.renderNews();
-
+        
         this.updateSetting('layout', layout);
     }
 
     toggleSettings() {
         const sidebar = document.getElementById('settingsSidebar');
         const overlay = document.getElementById('overlay');
-
+        
         sidebar.classList.toggle('active');
         overlay.classList.toggle('active');
     }
@@ -744,10 +803,10 @@ class NewsAggregator {
     toggleTheme() {
         const currentTheme = document.documentElement.getAttribute('data-theme');
         const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-
+        
         document.documentElement.setAttribute('data-theme', newTheme);
         this.updateSetting('theme', newTheme);
-
+        
         const themeIcon = document.querySelector('#themeToggle i');
         themeIcon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
     }
@@ -761,19 +820,19 @@ class NewsAggregator {
     applySettings() {
         document.documentElement.style.setProperty('--primary-color', this.settings.primaryColor);
         document.documentElement.style.setProperty('--background-color', this.settings.backgroundColor);
-
+        
         document.documentElement.style.setProperty('--font-family', this.settings.fontFamily);
-
+        
         document.documentElement.style.setProperty('--font-size', `${this.settings.fontSize}px`);
-
+        
         document.documentElement.setAttribute('data-theme', this.settings.theme);
-
+        
         this.currentLayout = this.settings.layout;
         const container = document.getElementById('newsContainer');
         container.classList.toggle('list-view', this.currentLayout === 'list');
-
+        
         this.updateSettingsUI();
-
+        
         const themeIcon = document.querySelector('#themeToggle i');
         themeIcon.className = this.settings.theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
     }
@@ -784,7 +843,7 @@ class NewsAggregator {
         document.getElementById('fontFamily').value = this.settings.fontFamily;
         document.getElementById('fontSize').value = this.settings.fontSize;
         document.getElementById('fontSizeValue').textContent = `${this.settings.fontSize}px`;
-
+        
         document.querySelectorAll('.layout-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.layout === this.settings.layout);
         });
@@ -824,7 +883,7 @@ class NewsAggregator {
         this.settings = { ...defaultSettings };
         this.saveSettings();
         this.applySettings();
-
+        
 
         this.currentCategory = 'all';
         this.searchQuery = '';
@@ -832,7 +891,7 @@ class NewsAggregator {
         document.querySelectorAll('.category-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.category === 'all');
         });
-
+        
         this.filterNews();
     }
 
@@ -840,7 +899,7 @@ class NewsAggregator {
     showLoading(show) {
         const spinner = document.getElementById('loadingSpinner');
         const container = document.getElementById('newsContainer');
-
+        
         if (show) {
             spinner.style.display = 'flex';
             container.style.display = 'none';
@@ -864,14 +923,7 @@ class NewsAggregator {
 
 
     showSuccessMessage(message) {
-        const container = document.getElementById('newsContainer');
-        container.innerHTML = `
-            <div class="success-message" style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #10b981;">
-                <i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                <h3>Success</h3>
-                <p>${message}</p>
-            </div>
-        `;
+        console.log(message);
     }
 }
 
@@ -901,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('.logo').addEventListener('click', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
-
+    
 
     document.addEventListener('keydown', (e) => {
 
@@ -909,7 +961,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             document.getElementById('searchInput').focus();
         }
-
+        
 
         if (e.key === 'Escape') {
             const sidebar = document.getElementById('settingsSidebar');
