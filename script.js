@@ -1,3 +1,5 @@
+
+
 class NewsAggregator {
     constructor() {
         this.newsData = [];

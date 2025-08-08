@@ -3,7 +3,7 @@ const CONFIG = {
     NEWS_API_URL: 'https://newsapi.org/v2/top-headlines',
 
     NEWS_API_PROXY_URL: 'https://aabhitak.onrender.com/api/news',
-    NEWS_API_COUNTRY: 'in',
+    NEWS_API_COUNTRY: 'us',
     ARTICLES_PER_PAGE: 100,
     AUTO_REFRESH_INTERVAL: 300000,
     CACHE_DURATION: 600000,
