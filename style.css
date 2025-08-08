@@ -12,6 +12,8 @@ body {
     background-color: var(--background-color);
     transition: var(--transition-normal);
     overflow-x: hidden;
+    /* Offset fixed header so content isn't hidden */
+    padding-top: var(--header-height);
 }
 
 
@@ -241,7 +243,8 @@ body {
 }
 
 .main-content {
-    margin-top: var(--header-height);
+    /* Header offset handled on body; avoid double spacing */
+    margin-top: 0;
     min-height: calc(100vh - var(--header-height));
     padding: var(--spacing-lg);
     max-width: var(--container-max-width);
@@ -498,19 +501,22 @@ body {
 }
 
 .footer-content {
-    max-width: var(--container-max-width);
+    max-width: none;
+    width: 100%;
     margin: 0 auto;
     padding: 0 var(--spacing-md);
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--spacing-md);
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 2px;
 }
 
 .footer-links {
     display: flex;
     gap: var(--spacing-lg);
+    justify-content: center;
 }
 
 .footer-link {

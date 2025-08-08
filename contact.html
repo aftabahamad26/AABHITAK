@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact – AABHI TAK</title>
+  <link rel="stylesheet" href="variables.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a class="logo" href="index.html">
+        <i class="fas fa-newspaper"></i>
+        <h1>AABHI TAK</h1>
+      </a>
+      <div class="header-controls">
+        <a class="settings-btn" id="settingsBtn" href="index.html">
+          <i class="fas fa-home"></i>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content" style="max-width: var(--container-max-width); margin: 0 auto;">
+    <section style="padding: var(--spacing-lg) 0;">
+      <h2>Contact</h2>
+      <p style="color: var(--text-secondary); margin-top: var(--spacing-sm);">Have feedback, found an issue, or want to get in touch?</p>
+
+      <form id="feedbackForm" style="margin-top: var(--spacing-lg); display: grid; gap: var(--spacing-md); max-width: 600px;">
+        <div style="display:grid; gap: var(--spacing-xs);">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" placeholder="Your name" required style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-color);">
+        </div>
+        <div style="display:grid; gap: var(--spacing-xs);">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" placeholder="you@example.com" required style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-color);">
+        </div>
+        <div style="display:grid; gap: var(--spacing-xs);">
+          <label for="subject">Subject (optional)</label>
+          <input id="subject" name="subject" type="text" placeholder="Subject" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-color);">
+        </div>
+        <div style="display:grid; gap: var(--spacing-xs);">
+          <label for="message">Message</label>
+          <textarea id="message" name="message" rows="6" placeholder="Your message..." required style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-color);"></textarea>
+        </div>
+        <button type="submit" style="padding: 12px 16px; background: var(--primary-color); color: #fff; border: none; border-radius: 8px; cursor: pointer;">Send Feedback</button>
+        <p id="feedbackStatus" style="display:none; color: var(--text-secondary);"></p>
+      </form>
+
+      <div style="margin-top: var(--spacing-xl); display: grid; gap: var(--spacing-md);">
+        <a class="footer-link" href="mailto:aftabahamad809@gmail.com"><i class="fas fa-envelope"></i> Email: aftabahamad809@gmail.com</a>
+        <a class="footer-link" href="https://github.com/aftabahamad26" target="_blank"><i class="fab fa-github"></i> GitHub: aftabahamad26</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content" style="justify-content:center;">
+      <p>© 2024 News Aggregator by Aftab Ahamad.</p>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script>
+    const saved = localStorage.getItem('newsAggregatorSettings');
+    if (saved) {
+      try {
+        const s = JSON.parse(saved);
+        if (s.theme) document.documentElement.setAttribute('data-theme', s.theme);
+      } catch {}
+    }
+
+    // Feedback form submit handler
+    const form = document.getElementById('feedbackForm');
+    const statusEl = document.getElementById('feedbackStatus');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusEl.style.display = 'block';
+      statusEl.textContent = 'Sending...';
+      const payload = {
+        name: document.getElementById('name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        subject: document.getElementById('subject').value.trim(),
+        message: document.getElementById('message').value.trim()
+      };
+      try {
+        const endpoint = (CONFIG.NEWS_API_PROXY_URL || '').replace('/api/news', '/api/feedback');
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (resp.ok) {
+          statusEl.textContent = 'Thanks for your feedback!';
+          form.reset();
+        } else {
+          const txt = await resp.text();
+          statusEl.textContent = 'Failed to send feedback. Please try again later.';
+          console.warn('Feedback error:', txt);
+        }
+      } catch (err) {
+        statusEl.textContent = 'Network error. Please try again later.';
+        console.warn('Feedback network error:', err);
+      }
+    });
+  </script>
+</body>
+</html>
+
+

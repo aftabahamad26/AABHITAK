@@ -1,80 +1,81 @@
-# News Aggregator
+## AABHI TAK – News Aggregator
 
-A customizable news aggregator that fetches real-time news from multiple sources.
+Customizable, responsive news dashboard. Frontend is a static site. Backend is a small Node/Express proxy that securely calls NewsAPI with your server-side key (no secrets in the browser).
 
-## Features
+### Features
+- 📰 Real-time top headlines via NewsAPI (through backend proxy)
+- 🧩 Enrichment fallback to increase article volume (category bundle + “everything” when needed)
+- 🗞️ BBC RSS fallback if API unavailable
+- 🔍 Search and category filters
+- 🎨 Theme, font, layout, and size customization
+- 🌙 Dark/light mode
 
-- 📰 Real-time news from NewsAPI.org and BBC RSS feed
-- 🎨 Customizable theme and colors
-- 🔍 Search functionality
-- 📱 Responsive design
-- 🌙 Dark/Light theme toggle
-- 📊 Category filtering
-- ⚙️ Settings panel
-
-## Setup Instructions
-
-### 1. Get Free NewsAPI Key
-
-1. Go to [https://newsapi.org](https://newsapi.org)
-2. Click "Get API Key" 
-3. Sign up for a free account
-4. Copy your API key
-
-### 2. Configure API Key
-
-1. Open `config.js`
-2. Replace `YOUR_NEWS_API_KEY_HERE` with your actual API key:
-
-```javascript
-NEWS_API_KEY: 'your_actual_api_key_here',
+### Project structure
+```
+ABHITAK/
+  Backend/            # Express proxy server (keeps API key on server)
+    server.js
+    config.js         # loads NEWS_API_KEY from environment
+    package.json
+    .gitignore        # ignores Backend/.env and node_modules
+  index.html          # static frontend
+  config.js           # client config (no secrets here)
+  script.js           # app logic
+  style.css, variables.css
 ```
 
-### 3. Run the Application
+### Quick start (local)
+1) Backend
+- cd Backend
+- Create `.env` with your key:
+  - `NEWS_API_KEY=your_real_key`
+- Install and run:
+  - `npm install`
+  - `npm start` (defaults to http://localhost:3000)
 
-1. Open terminal in the project directory
-2. Run: `python3 -m http.server 8000`
-3. Open browser and go to: `http://localhost:8000`
+2) Frontend
+- Ensure `config.js` has the proxy URL:
+  - `NEWS_API_PROXY_URL: 'http://localhost:3000/api/news'`
+- Serve the static files (any simple server):
+  - `python3 -m http.server 8000` (or VSCode Live Server, etc.)
+  - Open `http://localhost:8000`
 
-## Data Sources
+Note: Do not put API keys in `config.js`. The browser cannot keep secrets. The key belongs only in Backend/.env or your hosting provider’s environment settings.
 
-The app tries to fetch news in this order:
+### Deployment
+Backend (Render recommended)
+- Create new Web Service from this repo, set root directory to `Backend`
+- Build command: `npm install`
+- Start command: `npm start`
+- Add environment variable `NEWS_API_KEY`
+- Deploy and note the URL, e.g. `https://<your-service>.onrender.com`
 
-1. **NewsAPI.org** (Primary) - Requires API key
-2. **BBC RSS Feed** (Fallback) - Free, no API key needed
-3. **Mock Data** (Last resort) - Demo articles
+Frontend (Vercel recommended)
+- Import this repo into Vercel (Framework: “Other”)
+- Build command: none
+- Output directory: root
+- Ensure `config.js` uses your Render URL, e.g.:
+  - `NEWS_API_PROXY_URL: 'https://<your-service>.onrender.com/api/news'`
+- Deploy
 
-## Troubleshooting
+### Configuration (client `config.js`)
+- `NEWS_API_KEY`: leave empty on the client
+- `NEWS_API_PROXY_URL`: URL of your backend `/api/news`
+- `NEWS_API_COUNTRY`: e.g. `us`, `in`, `gb`
+- `ARTICLES_PER_PAGE`: requested size (NewsAPI caps at 100)
+- Other UI options: refresh interval, caching, theme settings
 
-### If you see dummy data:
+### API behavior and limits
+- NewsAPI free tier has request and endpoint limitations.
+- Top headlines are limited by country/category; using enrichment (“bundle” + “everything”) helps increase count and freshness.
+- “Everything” endpoint may have additional restrictions on production usage—volume depends on plan.
+- BBC RSS fallback is included if API requests fail.
 
-1. **Check API Key**: Make sure your NewsAPI key is valid
-2. **API Limits**: Free NewsAPI accounts have daily limits
-3. **Network Issues**: Check your internet connection
+### Troubleshooting
+- Few or older articles: try a different `NEWS_API_COUNTRY`, and rely on enrichment via the backend. Volume depends on NewsAPI plan and current headlines.
+- 401/Unauthorized: ensure `NEWS_API_KEY` is set on the backend (Render/Backend/.env) and not expired.
+- 429/Too Many Requests: you hit rate limits; wait or upgrade plan.
+- CORS: the backend sets permissive CORS for the frontend; always call NewsAPI through the backend from the browser.
 
-### Error Messages:
-
-- `API_KEY_NOT_CONFIGURED`: Add your API key to config.js
-- `INVALID_API_KEY`: Get a new API key from newsapi.org
-- `Too Many Requests`: Wait or upgrade your API plan
-
-## Customization
-
-The app includes a settings panel where you can:
-
-- Change primary and background colors
-- Select different font families
-- Adjust font size
-- Toggle between grid and list layouts
-- Switch between light and dark themes
-
-## Browser Support
-
-- Chrome (recommended)
-- Firefox
-- Safari
-- Edge
-
-## License
-
-This project is open source and available under the MIT License. 
+### License
+MIT

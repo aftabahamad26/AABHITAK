@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About – AABHI TAK</title>
+  <link rel="stylesheet" href="variables.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a class="logo" href="index.html">
+        <i class="fas fa-newspaper"></i>
+        <h1>AABHI TAK</h1>
+      </a>
+      <div class="header-controls">
+        <a class="settings-btn" id="settingsBtn" href="index.html">
+          <i class="fas fa-home"></i>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content" style="max-width: var(--container-max-width); margin: 0 auto;">
+    <section style="padding: var(--spacing-lg) 0;">
+      <h2>About</h2>
+      <p style="color: var(--text-secondary); margin-top: var(--spacing-sm);">
+        AABHI TAK is a customizable news aggregator that brings you top headlines and trending stories with a clean, responsive UI. 
+        You can search, filter by category, and personalize the theme, fonts, and layout.
+      </p>
+      <p style="color: var(--text-secondary); margin-top: var(--spacing-md);">
+        Real-time headlines are fetched through our backend proxy to keep API keys secure, with intelligent enrichment 
+        to increase article volume and freshness, plus RSS fallbacks for reliability.
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content" style="justify-content:center;">
+      <p>© 2024 News Aggregator by Aftab Ahamad.</p>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script>
+    // Optional: adopt current theme from localStorage
+    const saved = localStorage.getItem('newsAggregatorSettings');
+    if (saved) {
+      try {
+        const s = JSON.parse(saved);
+        if (s.theme) document.documentElement.setAttribute('data-theme', s.theme);
+      } catch {}
+    }
+  </script>
+</body>
+</html>
+
+

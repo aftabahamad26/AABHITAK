@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy – AABHI TAK</title>
+  <link rel="stylesheet" href="variables.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a class="logo" href="index.html">
+        <i class="fas fa-newspaper"></i>
+        <h1>AABHI TAK</h1>
+      </a>
+      <div class="header-controls">
+        <a class="settings-btn" id="settingsBtn" href="index.html">
+          <i class="fas fa-home"></i>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content" style="max-width: var(--container-max-width); margin: 0 auto;">
+    <section style="padding: var(--spacing-lg) 0;">
+      <h2>Privacy Policy</h2>
+      <p style="color: var(--text-secondary); margin-top: var(--spacing-sm);">
+        We do not sell or share your personal information. The site may use localStorage to remember your UI preferences 
+        (theme, layout, font), which stays on your device. API requests are proxied via our backend to protect API keys.
+      </p>
+      <p style="color: var(--text-secondary); margin-top: var(--spacing-md);">
+        Third-party content (news articles, images) is fetched from external sources. Clicking an article opens the 
+        original publisher’s website, whose privacy policy applies.
+      </p>
+      <p style="color: var(--text-secondary); margin-top: var(--spacing-md);">
+        For requests, corrections, or questions, contact us via the Contact page.
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content" style="justify-content:center;">
+      <p>© 2024 News Aggregator by Aftab Ahamad.</p>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script>
+    const saved = localStorage.getItem('newsAggregatorSettings');
+    if (saved) {
+      try {
+        const s = JSON.parse(saved);
+        if (s.theme) document.documentElement.setAttribute('data-theme', s.theme);
+      } catch {}
+    }
+  </script>
+</body>
+</html>
+
+
