@@ -1,5 +1,3 @@
-
-
 class NewsAggregator {
     constructor() {
         this.newsData = [];
@@ -8,7 +6,7 @@ class NewsAggregator {
         this.searchQuery = '';
         this.currentLayout = 'grid';
         this.settings = this.loadSettings();
-        
+
         this.init();
     }
 
@@ -19,38 +17,34 @@ class NewsAggregator {
     }
 
     setupEventListeners() {
-     
+
         document.getElementById('settingsBtn').addEventListener('click', () => this.toggleSettings());
         document.getElementById('closeSettings').addEventListener('click', () => this.toggleSettings());
         document.getElementById('overlay').addEventListener('click', () => this.toggleSettings());
 
-    
+
         document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
 
         const searchInput = document.getElementById('searchInput');
         searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
         document.getElementById('clearSearch').addEventListener('click', () => this.clearSearch());
 
-        // Category filters
         document.querySelectorAll('.category-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.handleCategoryFilter(e.target.dataset.category));
         });
 
-        // Settings controls
         this.setupSettingsControls();
 
-        // Layout buttons
         document.querySelectorAll('.layout-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.handleLayoutChange(e.target.dataset.layout));
         });
 
-        // Reset settings
         document.getElementById('resetSettings').addEventListener('click', () => this.resetSettings());
     }
 
-    // Setup settings controls with event listeners
+
     setupSettingsControls() {
-        // Color pickers
+
         document.getElementById('primaryColor').addEventListener('change', (e) => {
             this.updateSetting('primaryColor', e.target.value);
         });
@@ -59,15 +53,15 @@ class NewsAggregator {
             this.updateSetting('backgroundColor', e.target.value);
         });
 
-        // Font family
+
         document.getElementById('fontFamily').addEventListener('change', (e) => {
             this.updateSetting('fontFamily', e.target.value);
         });
 
-        // Font size
+
         const fontSizeSlider = document.getElementById('fontSize');
         const fontSizeValue = document.getElementById('fontSizeValue');
-        
+
         fontSizeSlider.addEventListener('input', (e) => {
             const size = e.target.value;
             fontSizeValue.textContent = `${size}px`;
@@ -78,7 +72,7 @@ class NewsAggregator {
     async testAPIKey() {
         try {
             const testResponse = await fetch(`${CONFIG.NEWS_API_URL}?country=us&apiKey=${CONFIG.NEWS_API_KEY}&pageSize=1`);
-            
+
             if (testResponse.ok) {
                 const testData = await testResponse.json();
                 if (testData.status === 'ok') {
@@ -97,24 +91,21 @@ class NewsAggregator {
         }
     }
 
-    // Fetch news from API or use mock data
     async fetchNews() {
         this.showLoading(true);
-        
+
         try {
-            // If no client key and proxy not set, we cannot call NewsAPI
+
             if (!CONFIG.NEWS_API_PROXY_URL && (!CONFIG.NEWS_API_KEY || CONFIG.NEWS_API_KEY === 'YOUR_NEWS_API_KEY')) {
                 throw new Error('API_KEY_NOT_CONFIGURED');
             }
-            
-            // Optional: Test API key (do not block main attempts on CORS/network issues)
+
             try {
                 await this.testAPIKey();
             } catch (precheckError) {
                 console.warn('API key precheck failed, will still attempt main requests:', precheckError);
             }
-            
-            // Try proxy endpoint first if configured (best for CORS and security)
+
             if (CONFIG.NEWS_API_PROXY_URL) {
                 try {
                     console.log('🌐 Trying configured proxy endpoint...');
@@ -150,11 +141,9 @@ class NewsAggregator {
                 }
             }
 
-            // Try NewsAPI.org (priority when CORS allows)
             let response;
             try {
                 console.log('🔍 Trying NewsAPI.org...');
-                // Try direct API call first
                 const url = `${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}`;
                 response = await fetch(url, {
                     method: 'GET',
@@ -163,24 +152,23 @@ class NewsAggregator {
                         'X-Api-Key': CONFIG.NEWS_API_KEY
                     }
                 });
-                
+
                 console.log('📡 NewsAPI response status:', response.status);
-                
+
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('❌ NewsAPI HTTP error:', response.status, errorText);
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
+
                 const data = await response.json();
                 console.log('📊 NewsAPI data received:', data.status, 'articles:', data.articles?.length);
-                
+
                 if (data.status === 'error') {
                     console.error('❌ NewsAPI error:', data.message);
                     throw new Error(data.message || 'API Error');
                 }
-                
-                // Transform API data to our format
+
                 this.newsData = data.articles.map((article, index) => ({
                     id: index + 1,
                     title: article.title || 'No title available',
@@ -191,36 +179,31 @@ class NewsAggregator {
                     publishedAt: article.publishedAt || new Date().toISOString(),
                     category: this.categorizeArticle(article.title, article.description)
                 }));
-                
+
                 this.filteredNews = [...this.newsData];
                 this.renderNews();
-                
-                // Show success message for NewsAPI
+
                 if (CONFIG.SHOW_API_ERRORS) {
                     this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news articles from NewsAPI.org!`);
                 }
                 return;
-                
+
             } catch (error) {
                 console.error('❌ NewsAPI failed, trying CORS proxy:', error);
-                
-                // Try CORS proxies as fallbacks
+
                 try {
                     console.log('🌐 Trying CORS proxy...');
                     const proxiedUrl = `${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}&apiKey=${encodeURIComponent(CONFIG.NEWS_API_KEY)}`;
                     const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(proxiedUrl)}`;
                     response = await fetch(proxyUrl);
-                    
+
                     console.log('📡 CORS proxy response status:', response.status);
-                    
+
                     if (!response.ok) {
                         const errorText = await response.text();
                         console.error('❌ CORS proxy error:', response.status, errorText);
                         throw new Error(`CORS proxy error! status: ${response.status}`);
                     }
-                    
-                    // AllOrigins 'raw' returns the raw body. Some instances proxy JSON without CORS headers.
-                    // If JSON parse fails, try to parse manually when content-type is text/plain.
                     let dataText = await response.text();
                     let data;
                     try {
@@ -230,13 +213,12 @@ class NewsAggregator {
                         data = {};
                     }
                     console.log('📊 CORS proxy data received:', data.status, 'articles:', data.articles?.length);
-                    
+
                     if (data.status === 'error') {
                         console.error('❌ CORS proxy API error:', data.message);
                         throw new Error(data.message || 'API Error');
                     }
-                    
-                    // Transform API data to our format
+
                     this.newsData = data.articles.map((article, index) => ({
                         id: index + 1,
                         title: article.title || 'No title available',
@@ -247,19 +229,17 @@ class NewsAggregator {
                         publishedAt: article.publishedAt || new Date().toISOString(),
                         category: this.categorizeArticle(article.title, article.description)
                     }));
-                    
+
                     this.filteredNews = [...this.newsData];
                     this.renderNews();
-                    
-                    // Show success message for CORS proxy
+
                     if (CONFIG.SHOW_API_ERRORS) {
                         this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news articles via CORS proxy!`);
                     }
                     return;
-                    
+
                 } catch (proxyError) {
                     console.error('❌ CORS proxy failed:', proxyError);
-                    // Try a second proxy before giving up
                     try {
                         console.log('🌐 Trying secondary CORS proxy...');
                         const secondProxyUrl = `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(proxiedUrl)}`;
@@ -308,7 +288,6 @@ class NewsAggregator {
                         return;
                     } catch (secondProxyError) {
                         console.error('❌ Secondary proxy also failed:', secondProxyError);
-                        // Try a third public proxy
                         try {
                             console.log('🌐 Trying tertiary CORS proxy...');
                             const thirdProxyUrl = `https://corsproxy.io/?${encodeURIComponent(proxiedUrl)}`;
@@ -356,22 +335,22 @@ class NewsAggregator {
                             return;
                         } catch (thirdProxyError) {
                             console.error('❌ Tertiary proxy also failed:', thirdProxyError);
-                            // Fall through to RSS fallback handled below in catch block
+
                             throw error;
                         }
                     }
                 }
             }
         } catch (error) {
-            // Fallback to RSS feed
+
             try {
                 const rssResponse = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/rss.xml');
-                
+
                 if (rssResponse.ok) {
                     const rssData = await rssResponse.json();
-                    
+
                     if (rssData.status === 'ok' && rssData.items) {
-                        // Transform RSS data to our format
+
                         this.newsData = rssData.items.map((item, index) => ({
                             id: index + 1,
                             title: item.title || 'No title available',
@@ -382,10 +361,10 @@ class NewsAggregator {
                             publishedAt: item.pubDate || new Date().toISOString(),
                             category: this.categorizeArticle(item.title, item.description)
                         }));
-                        
+
                         this.filteredNews = [...this.newsData];
                         this.renderNews();
-                        
+
                         if (CONFIG.SHOW_API_ERRORS) {
                             this.showSuccessMessage(`📰 Loaded ${this.newsData.length} articles from BBC RSS feed (NewsAPI failed)`);
                         }
@@ -395,25 +374,25 @@ class NewsAggregator {
             } catch (rssError) {
                 console.error('RSS feed also failed:', rssError);
             }
-            
-            // Handle different error types
+
+
             if (error && typeof error.message === 'string') {
-            if (error.message === 'API_KEY_NOT_CONFIGURED') {
-                this.showError('Please configure your NewsAPI key in config.js to fetch real news. Using demo data instead.');
-            } else if (error.message === 'INVALID_API_KEY') {
-                this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
-            } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-                this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
-            } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
-                this.showError('API rate limit exceeded. Using demo data instead.');
-            } else {
-                this.showError(`Failed to load real-time news: ${error.message}. Using demo data instead.`);
+                if (error.message === 'API_KEY_NOT_CONFIGURED') {
+                    this.showError('Please configure your NewsAPI key in config.js to fetch real news. Using demo data instead.');
+                } else if (error.message === 'INVALID_API_KEY') {
+                    this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
+                } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+                    this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
+                } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+                    this.showError('API rate limit exceeded. Using demo data instead.');
+                } else {
+                    this.showError(`Failed to load real-time news: ${error.message}. Using demo data instead.`);
                 }
             } else {
                 this.showError('Failed to load real-time news. Using demo data instead.');
             }
-            
-            // Use mock data as fallback
+
+
             if (CONFIG.USE_MOCK_DATA_AS_FALLBACK) {
                 const mockNews = this.getMockNewsData();
                 this.newsData = mockNews;
@@ -425,72 +404,72 @@ class NewsAggregator {
         }
     }
 
-    // Categorize articles based on content
+
     categorizeArticle(title, description) {
         const content = (title + ' ' + description).toLowerCase();
-        
-        // Business category - more specific keywords
-        if (content.includes('business') || content.includes('market') || content.includes('economy') || 
+
+
+        if (content.includes('business') || content.includes('market') || content.includes('economy') ||
             content.includes('finance') || content.includes('stock') || content.includes('investment') ||
             content.includes('banking') || content.includes('trading') || content.includes('wall street') ||
             content.includes('earnings') || content.includes('revenue') || content.includes('profit') ||
             content.includes('ceo') || content.includes('company') || content.includes('corporate')) {
             return 'business';
-        } 
-        // Technology category - expanded keywords
-        else if (content.includes('tech') || content.includes('ai') || content.includes('artificial intelligence') || 
-                 content.includes('software') || content.includes('digital') || content.includes('computer') ||
-                 content.includes('internet') || content.includes('social media') || content.includes('app') ||
-                 content.includes('startup') || content.includes('innovation') || content.includes('cyber') ||
-                 content.includes('data') || content.includes('algorithm') || content.includes('platform')) {
+        }
+
+        else if (content.includes('tech') || content.includes('ai') || content.includes('artificial intelligence') ||
+            content.includes('software') || content.includes('digital') || content.includes('computer') ||
+            content.includes('internet') || content.includes('social media') || content.includes('app') ||
+            content.includes('startup') || content.includes('innovation') || content.includes('cyber') ||
+            content.includes('data') || content.includes('algorithm') || content.includes('platform')) {
             return 'technology';
-        } 
-        // Sports category - expanded keywords
-        else if (content.includes('sport') || content.includes('football') || content.includes('basketball') || 
-                 content.includes('tennis') || content.includes('olympic') || content.includes('baseball') ||
-                 content.includes('soccer') || content.includes('golf') || content.includes('hockey') ||
-                 content.includes('championship') || content.includes('league') || content.includes('team') ||
-                 content.includes('player') || content.includes('coach') || content.includes('game')) {
+        }
+
+        else if (content.includes('sport') || content.includes('football') || content.includes('basketball') ||
+            content.includes('tennis') || content.includes('olympic') || content.includes('baseball') ||
+            content.includes('soccer') || content.includes('golf') || content.includes('hockey') ||
+            content.includes('championship') || content.includes('league') || content.includes('team') ||
+            content.includes('player') || content.includes('coach') || content.includes('game')) {
             return 'sports';
-        } 
-        // Entertainment category - expanded keywords
-        else if (content.includes('movie') || content.includes('film') || content.includes('entertainment') || 
-                 content.includes('celebrity') || content.includes('music') || content.includes('actor') ||
-                 content.includes('actress') || content.includes('director') || content.includes('award') ||
-                 content.includes('concert') || content.includes('album') || content.includes('show') ||
-                 content.includes('tv') || content.includes('television') || content.includes('streaming')) {
+        }
+
+        else if (content.includes('movie') || content.includes('film') || content.includes('entertainment') ||
+            content.includes('celebrity') || content.includes('music') || content.includes('actor') ||
+            content.includes('actress') || content.includes('director') || content.includes('award') ||
+            content.includes('concert') || content.includes('album') || content.includes('show') ||
+            content.includes('tv') || content.includes('television') || content.includes('streaming')) {
             return 'entertainment';
-        } 
-        // Health category - expanded keywords
-        else if (content.includes('health') || content.includes('medical') || content.includes('covid') || 
-                 content.includes('vaccine') || content.includes('treatment') || content.includes('hospital') ||
-                 content.includes('doctor') || content.includes('patient') || content.includes('disease') ||
-                 content.includes('medicine') || content.includes('therapy') || content.includes('clinic') ||
-                 content.includes('surgery') || content.includes('drug') || content.includes('pharmaceutical')) {
+        }
+
+        else if (content.includes('health') || content.includes('medical') || content.includes('covid') ||
+            content.includes('vaccine') || content.includes('treatment') || content.includes('hospital') ||
+            content.includes('doctor') || content.includes('patient') || content.includes('disease') ||
+            content.includes('medicine') || content.includes('therapy') || content.includes('clinic') ||
+            content.includes('surgery') || content.includes('drug') || content.includes('pharmaceutical')) {
             return 'health';
-        } 
-        // Science category - expanded keywords
-        else if (content.includes('science') || content.includes('research') || content.includes('study') || 
-                 content.includes('discovery') || content.includes('climate') || content.includes('environment') ||
-                 content.includes('space') || content.includes('nasa') || content.includes('university') ||
-                 content.includes('experiment') || content.includes('laboratory') || content.includes('scientist') ||
-                 content.includes('innovation') || content.includes('breakthrough') || content.includes('analysis')) {
+        }
+
+        else if (content.includes('science') || content.includes('research') || content.includes('study') ||
+            content.includes('discovery') || content.includes('climate') || content.includes('environment') ||
+            content.includes('space') || content.includes('nasa') || content.includes('university') ||
+            content.includes('experiment') || content.includes('laboratory') || content.includes('scientist') ||
+            content.includes('innovation') || content.includes('breakthrough') || content.includes('analysis')) {
             return 'science';
-        } 
-        // General category - everything else
+        }
+
         else {
             return 'general';
         }
     }
 
-    // Mock news data for demonstration
+
     getMockNewsData() {
         const currentDate = new Date();
         const yesterday = new Date(currentDate);
         yesterday.setDate(currentDate.getDate() - 1);
         const twoDaysAgo = new Date(currentDate);
         twoDaysAgo.setDate(currentDate.getDate() - 2);
-        
+
         return [
             {
                 id: 1,
@@ -616,51 +595,51 @@ class NewsAggregator {
         ];
     }
 
-    // Handle search functionality
+
     handleSearch(query) {
         this.searchQuery = query.toLowerCase().trim();
         this.filterNews();
     }
 
-    // Clear search
+
     clearSearch() {
         document.getElementById('searchInput').value = '';
         this.searchQuery = '';
         this.filterNews();
     }
 
-    // Handle category filter
+
     handleCategoryFilter(category) {
-        // Update active button
+
         document.querySelectorAll('.category-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.category === category);
         });
-        
+
         this.currentCategory = category;
         this.filterNews();
     }
 
-    // Filter news based on category and search
+
     filterNews() {
         this.filteredNews = this.newsData.filter(article => {
-            const matchesCategory = this.currentCategory === 'all' || 
-                                  article.category === this.currentCategory;
-            
+            const matchesCategory = this.currentCategory === 'all' ||
+                article.category === this.currentCategory;
+
             const matchesSearch = this.searchQuery === '' ||
-                                article.title.toLowerCase().includes(this.searchQuery) ||
-                                article.description.toLowerCase().includes(this.searchQuery);
-            
+                article.title.toLowerCase().includes(this.searchQuery) ||
+                article.description.toLowerCase().includes(this.searchQuery);
+
             return matchesCategory && matchesSearch;
         });
 
         this.renderNews();
     }
 
-    // Render news articles
+
     renderNews() {
         const container = document.getElementById('newsContainer');
         const noResults = document.getElementById('noResults');
-        
+
         if (this.filteredNews.length === 0) {
             container.innerHTML = '';
             noResults.style.display = 'block';
@@ -668,11 +647,11 @@ class NewsAggregator {
         }
 
         noResults.style.display = 'none';
-        
+
         container.innerHTML = this.filteredNews.map(article => this.createNewsCard(article)).join('');
     }
 
-    // Create individual news card HTML
+
     createNewsCard(article) {
         const publishedDate = new Date(article.publishedAt).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -699,98 +678,82 @@ class NewsAggregator {
         `;
     }
 
-    // Handle layout change
+
     handleLayoutChange(layout) {
         this.currentLayout = layout;
-        
-        // Update active button
+
+
         document.querySelectorAll('.layout-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.layout === layout);
         });
-        
-        // Update container class
+
+
         const container = document.getElementById('newsContainer');
         container.classList.toggle('list-view', layout === 'list');
-        
-        // Re-render news to apply new layout
+
         this.renderNews();
-        
-        // Save layout preference
+
         this.updateSetting('layout', layout);
     }
 
-    // Toggle settings sidebar
     toggleSettings() {
         const sidebar = document.getElementById('settingsSidebar');
         const overlay = document.getElementById('overlay');
-        
+
         sidebar.classList.toggle('active');
         overlay.classList.toggle('active');
     }
 
-    // Toggle theme (light/dark)
     toggleTheme() {
         const currentTheme = document.documentElement.getAttribute('data-theme');
         const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
+
         document.documentElement.setAttribute('data-theme', newTheme);
         this.updateSetting('theme', newTheme);
-        
-        // Update theme toggle icon
+
         const themeIcon = document.querySelector('#themeToggle i');
         themeIcon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
     }
 
-    // Update a setting and save to localStorage
     updateSetting(key, value) {
         this.settings[key] = value;
         this.saveSettings();
         this.applySettings();
     }
 
-    // Apply current settings to the UI
     applySettings() {
-        // Apply colors
         document.documentElement.style.setProperty('--primary-color', this.settings.primaryColor);
         document.documentElement.style.setProperty('--background-color', this.settings.backgroundColor);
-        
-        // Apply font family
+
         document.documentElement.style.setProperty('--font-family', this.settings.fontFamily);
-        
-        // Apply font size
+
         document.documentElement.style.setProperty('--font-size', `${this.settings.fontSize}px`);
-        
-        // Apply theme
+
         document.documentElement.setAttribute('data-theme', this.settings.theme);
-        
-        // Apply layout
+
         this.currentLayout = this.settings.layout;
         const container = document.getElementById('newsContainer');
         container.classList.toggle('list-view', this.currentLayout === 'list');
-        
-        // Update settings UI to reflect current values
+
         this.updateSettingsUI();
-        
-        // Update theme toggle icon
+
         const themeIcon = document.querySelector('#themeToggle i');
         themeIcon.className = this.settings.theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
     }
 
-    // Update settings UI to reflect current values
     updateSettingsUI() {
         document.getElementById('primaryColor').value = this.settings.primaryColor;
         document.getElementById('backgroundColor').value = this.settings.backgroundColor;
         document.getElementById('fontFamily').value = this.settings.fontFamily;
         document.getElementById('fontSize').value = this.settings.fontSize;
         document.getElementById('fontSizeValue').textContent = `${this.settings.fontSize}px`;
-        
-        // Update layout buttons
+
         document.querySelectorAll('.layout-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.layout === this.settings.layout);
         });
     }
 
-    // Load settings from localStorage
+
     loadSettings() {
         const defaultSettings = {
             primaryColor: '#2563eb',
@@ -805,12 +768,12 @@ class NewsAggregator {
         return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
     }
 
-    // Save settings to localStorage
+
     saveSettings() {
         localStorage.setItem('newsAggregatorSettings', JSON.stringify(this.settings));
     }
 
-    // Reset settings to default
+
     resetSettings() {
         const defaultSettings = {
             primaryColor: '#2563eb',
@@ -824,23 +787,23 @@ class NewsAggregator {
         this.settings = { ...defaultSettings };
         this.saveSettings();
         this.applySettings();
-        
-        // Reset category and search
+
+
         this.currentCategory = 'all';
         this.searchQuery = '';
         document.getElementById('searchInput').value = '';
         document.querySelectorAll('.category-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.category === 'all');
         });
-        
+
         this.filterNews();
     }
 
-    // Show/hide loading spinner
+
     showLoading(show) {
         const spinner = document.getElementById('loadingSpinner');
         const container = document.getElementById('newsContainer');
-        
+
         if (show) {
             spinner.style.display = 'flex';
             container.style.display = 'none';
@@ -850,7 +813,7 @@ class NewsAggregator {
         }
     }
 
-    // Show error message
+
     showError(message) {
         const container = document.getElementById('newsContainer');
         container.innerHTML = `
@@ -862,7 +825,7 @@ class NewsAggregator {
         `;
     }
 
-    // Show success message
+
     showSuccessMessage(message) {
         const container = document.getElementById('newsContainer');
         container.innerHTML = `
@@ -875,14 +838,14 @@ class NewsAggregator {
     }
 }
 
-// Initialize the application when DOM is loaded
+
 document.addEventListener('DOMContentLoaded', () => {
     new NewsAggregator();
 });
 
-// Add some utility functions for better user experience
 
-// Debounce function for search
+
+
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -895,22 +858,22 @@ function debounce(func, wait) {
     };
 }
 
-// Add smooth scrolling for better UX
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Smooth scroll to top when clicking on logo
+
     document.querySelector('.logo').addEventListener('click', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
-    
-    // Add keyboard shortcuts
+
+
     document.addEventListener('keydown', (e) => {
-        // Ctrl/Cmd + K to focus search
+
         if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
             e.preventDefault();
             document.getElementById('searchInput').focus();
         }
-        
-        // Escape to close settings
+
+
         if (e.key === 'Escape') {
             const sidebar = document.getElementById('settingsSidebar');
             if (sidebar.classList.contains('active')) {
