@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customizable News Aggregator</title>
+    <link rel="stylesheet" href="variables.css">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-newspaper"></i>
+                <h1>News Aggregator</h1>
+            </div>
+            <div class="header-controls">
+                <button class="settings-btn" id="settingsBtn">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button class="theme-toggle" id="themeToggle">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Settings Sidebar -->
+    <div class="settings-sidebar" id="settingsSidebar">
+        <div class="sidebar-header">
+            <h3>Customization Settings</h3>
+            <button class="close-btn" id="closeSettings">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="settings-content">
+            <!-- Theme Settings -->
+            <div class="setting-group">
+                <h4>Theme Settings</h4>
+                <div class="setting-item">
+                    <label for="primaryColor">Primary Color:</label>
+                    <input type="color" id="primaryColor" value="#2563eb">
+                </div>
+                <div class="setting-item">
+                    <label for="backgroundColor">Background Color:</label>
+                    <input type="color" id="backgroundColor" value="#ffffff">
+                </div>
+            </div>
+
+            <!-- Font Settings -->
+            <div class="setting-group">
+                <h4>Font Settings</h4>
+                <div class="setting-item">
+                    <label for="fontFamily">Font Family:</label>
+                    <select id="fontFamily">
+                        <option value="Inter">Inter</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Open Sans">Open Sans</option>
+                        <option value="Poppins">Poppins</option>
+                        <option value="system-ui">System Font</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="fontSize">Font Size:</label>
+                    <input type="range" id="fontSize" min="12" max="20" value="16">
+                    <span id="fontSizeValue">16px</span>
+                </div>
+            </div>
+
+            <!-- Layout Settings -->
+            <div class="setting-group">
+                <h4>Layout Settings</h4>
+                <div class="setting-item">
+                    <label>View Mode:</label>
+                    <div class="layout-buttons">
+                        <button class="layout-btn active" data-layout="grid">
+                            <i class="fas fa-th"></i> Grid
+                        </button>
+                        <button class="layout-btn" data-layout="list">
+                            <i class="fas fa-list"></i> List
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reset Button -->
+            <div class="setting-group">
+                <button class="reset-btn" id="resetSettings">
+                    <i class="fas fa-undo"></i> Reset to Default
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay -->
+    <div class="overlay" id="overlay"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Search and Filter Section -->
+        <div class="search-filter-section">
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchInput" placeholder="Search news...">
+                    <button id="clearSearch" class="clear-search">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="category-filters">
+                <button class="category-btn active" data-category="all">All</button>
+                <button class="category-btn" data-category="business">Business</button>
+                <button class="category-btn" data-category="technology">Technology</button>
+                <button class="category-btn" data-category="sports">Sports</button>
+                <button class="category-btn" data-category="entertainment">Entertainment</button>
+                <button class="category-btn" data-category="health">Health</button>
+                <button class="category-btn" data-category="science">Science</button>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div class="loading-spinner" id="loadingSpinner">
+            <div class="spinner"></div>
+            <p>Loading news...</p>
+        </div>
+
+        <!-- News Container -->
+        <div class="news-container" id="newsContainer">
+            <!-- News articles will be dynamically inserted here -->
+        </div>
+
+        <!-- No Results Message -->
+        <div class="no-results" id="noResults" style="display: none;">
+            <i class="fas fa-search"></i>
+            <h3>No articles found</h3>
+            <p>Try adjusting your search terms or filters</p>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2024 News Aggregator by Aftab Ahamad. </p>
+            <div class="footer-links">
+                <a href="#" class="footer-link">About</a>
+                <a href="#" class="footer-link">Privacy</a>
+                <a href="#" class="footer-link">Contact</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 

@@ -1,0 +1,778 @@
+// News Aggregator JavaScript
+// Main application class to handle all functionality
+
+class NewsAggregator {
+    constructor() {
+        this.newsData = [];
+        this.filteredNews = [];
+        this.currentCategory = 'all';
+        this.searchQuery = '';
+        this.currentLayout = 'grid';
+        this.settings = this.loadSettings();
+        
+        this.init();
+    }
+
+    // Initialize the application
+    init() {
+        this.setupEventListeners();
+        this.applySettings();
+        this.fetchNews();
+    }
+
+    // Setup all event listeners
+    setupEventListeners() {
+        // Settings sidebar
+        document.getElementById('settingsBtn').addEventListener('click', () => this.toggleSettings());
+        document.getElementById('closeSettings').addEventListener('click', () => this.toggleSettings());
+        document.getElementById('overlay').addEventListener('click', () => this.toggleSettings());
+
+        // Theme toggle
+        document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
+
+        // Search functionality
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+        document.getElementById('clearSearch').addEventListener('click', () => this.clearSearch());
+
+        // Category filters
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.handleCategoryFilter(e.target.dataset.category));
+        });
+
+        // Settings controls
+        this.setupSettingsControls();
+
+        // Layout buttons
+        document.querySelectorAll('.layout-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.handleLayoutChange(e.target.dataset.layout));
+        });
+
+        // Reset settings
+        document.getElementById('resetSettings').addEventListener('click', () => this.resetSettings());
+    }
+
+    // Setup settings controls with event listeners
+    setupSettingsControls() {
+        // Color pickers
+        document.getElementById('primaryColor').addEventListener('change', (e) => {
+            this.updateSetting('primaryColor', e.target.value);
+        });
+
+        document.getElementById('backgroundColor').addEventListener('change', (e) => {
+            this.updateSetting('backgroundColor', e.target.value);
+        });
+
+        // Font family
+        document.getElementById('fontFamily').addEventListener('change', (e) => {
+            this.updateSetting('fontFamily', e.target.value);
+        });
+
+        // Font size
+        const fontSizeSlider = document.getElementById('fontSize');
+        const fontSizeValue = document.getElementById('fontSizeValue');
+        
+        fontSizeSlider.addEventListener('input', (e) => {
+            const size = e.target.value;
+            fontSizeValue.textContent = `${size}px`;
+            this.updateSetting('fontSize', size);
+        });
+    }
+
+    async testAPIKey() {
+        try {
+            const testResponse = await fetch(`${CONFIG.NEWS_API_URL}?country=us&apiKey=${CONFIG.NEWS_API_KEY}&pageSize=1`);
+            
+            if (testResponse.ok) {
+                const testData = await testResponse.json();
+                if (testData.status === 'ok') {
+                    return true;
+                } else {
+                    console.error('❌ API key test failed:', testData.message);
+                    return false;
+                }
+            } else {
+                console.error('❌ API key test failed with status:', testResponse.status);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ API key test error:', error);
+            return false;
+        }
+    }
+
+    // Fetch news from API or use mock data
+    async fetchNews() {
+        this.showLoading(true);
+        
+        try {
+            // Check if API key is configured
+            if (!CONFIG.NEWS_API_KEY || CONFIG.NEWS_API_KEY === 'YOUR_NEWS_API_KEY') {
+                throw new Error('API_KEY_NOT_CONFIGURED');
+            }
+            
+            // Test API key first
+            const isAPIValid = await this.testAPIKey();
+            if (!isAPIValid) {
+                throw new Error('INVALID_API_KEY');
+            }
+            
+            // Try NewsAPI.org first (priority)
+            let response;
+            try {
+                console.log('🔍 Trying NewsAPI.org...');
+                // Try direct API call first
+                response = await fetch(`${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&apiKey=${CONFIG.NEWS_API_KEY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'NewsAggregator/1.0'
+                    }
+                });
+                
+                console.log('📡 NewsAPI response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ NewsAPI HTTP error:', response.status, errorText);
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('📊 NewsAPI data received:', data.status, 'articles:', data.articles?.length);
+                
+                if (data.status === 'error') {
+                    console.error('❌ NewsAPI error:', data.message);
+                    throw new Error(data.message || 'API Error');
+                }
+                
+                // Transform API data to our format
+                this.newsData = data.articles.map((article, index) => ({
+                    id: index + 1,
+                    title: article.title || 'No title available',
+                    description: article.description || 'No description available',
+                    url: article.url || '#',
+                    urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                    source: { name: article.source?.name || 'Unknown Source' },
+                    publishedAt: article.publishedAt || new Date().toISOString(),
+                    category: this.categorizeArticle(article.title, article.description)
+                }));
+                
+                this.filteredNews = [...this.newsData];
+                this.renderNews();
+                
+                // Show success message for NewsAPI
+                if (CONFIG.SHOW_API_ERRORS) {
+                    this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news articles from NewsAPI.org!`);
+                }
+                return;
+                
+            } catch (error) {
+                console.error('❌ NewsAPI failed, trying CORS proxy:', error);
+                
+                // Try CORS proxy as fallback
+                try {
+                    console.log('🌐 Trying CORS proxy...');
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`${CONFIG.NEWS_API_URL}?country=${CONFIG.NEWS_API_COUNTRY}&apiKey=${CONFIG.NEWS_API_KEY}&pageSize=${CONFIG.ARTICLES_PER_PAGE}`)}`;
+                    response = await fetch(proxyUrl);
+                    
+                    console.log('📡 CORS proxy response status:', response.status);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('❌ CORS proxy error:', response.status, errorText);
+                        throw new Error(`CORS proxy error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('📊 CORS proxy data received:', data.status, 'articles:', data.articles?.length);
+                    
+                    if (data.status === 'error') {
+                        console.error('❌ CORS proxy API error:', data.message);
+                        throw new Error(data.message || 'API Error');
+                    }
+                    
+                    // Transform API data to our format
+                    this.newsData = data.articles.map((article, index) => ({
+                        id: index + 1,
+                        title: article.title || 'No title available',
+                        description: article.description || 'No description available',
+                        url: article.url || '#',
+                        urlToImage: article.urlToImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                        source: { name: article.source?.name || 'Unknown Source' },
+                        publishedAt: article.publishedAt || new Date().toISOString(),
+                        category: this.categorizeArticle(article.title, article.description)
+                    }));
+                    
+                    this.filteredNews = [...this.newsData];
+                    this.renderNews();
+                    
+                    // Show success message for CORS proxy
+                    if (CONFIG.SHOW_API_ERRORS) {
+                        this.showSuccessMessage(`✅ Loaded ${this.newsData.length} real-time news articles via CORS proxy!`);
+                    }
+                    return;
+                    
+                } catch (proxyError) {
+                    console.error('❌ CORS proxy also failed:', proxyError);
+                    throw error; // Throw original error for RSS fallback
+                }
+            }
+            
+            // Fallback to RSS feed
+            try {
+                const rssResponse = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/rss.xml');
+                
+                if (rssResponse.ok) {
+                    const rssData = await rssResponse.json();
+                    
+                    if (rssData.status === 'ok' && rssData.items) {
+                        // Transform RSS data to our format
+                        this.newsData = rssData.items.map((item, index) => ({
+                            id: index + 1,
+                            title: item.title || 'No title available',
+                            description: item.description || 'No description available',
+                            url: item.link || '#',
+                            urlToImage: item.thumbnail || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop',
+                            source: { name: 'BBC News' },
+                            publishedAt: item.pubDate || new Date().toISOString(),
+                            category: this.categorizeArticle(item.title, item.description)
+                        }));
+                        
+                        this.filteredNews = [...this.newsData];
+                        this.renderNews();
+                        
+                        if (CONFIG.SHOW_API_ERRORS) {
+                            this.showSuccessMessage(`📰 Loaded ${this.newsData.length} articles from BBC RSS feed (NewsAPI failed)`);
+                        }
+                        return;
+                    }
+                }
+            } catch (rssError) {
+                console.error('RSS feed also failed:', rssError);
+            }
+            
+            // Handle different error types
+            if (error.message === 'API_KEY_NOT_CONFIGURED') {
+                this.showError('Please configure your NewsAPI key in config.js to fetch real news. Using demo data instead.');
+            } else if (error.message === 'INVALID_API_KEY') {
+                this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
+            } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+                this.showError('Invalid API key. Please check your NewsAPI key in config.js. Using demo data instead.');
+            } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+                this.showError('API rate limit exceeded. Using demo data instead.');
+            } else {
+                this.showError(`Failed to load real-time news: ${error.message}. Using demo data instead.`);
+            }
+            
+            // Use mock data as fallback
+            if (CONFIG.USE_MOCK_DATA_AS_FALLBACK) {
+                const mockNews = this.getMockNewsData();
+                this.newsData = mockNews;
+                this.filteredNews = [...this.newsData];
+                this.renderNews();
+            }
+            
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Categorize articles based on content
+    categorizeArticle(title, description) {
+        const content = (title + ' ' + description).toLowerCase();
+        
+        // Business category - more specific keywords
+        if (content.includes('business') || content.includes('market') || content.includes('economy') || 
+            content.includes('finance') || content.includes('stock') || content.includes('investment') ||
+            content.includes('banking') || content.includes('trading') || content.includes('wall street') ||
+            content.includes('earnings') || content.includes('revenue') || content.includes('profit') ||
+            content.includes('ceo') || content.includes('company') || content.includes('corporate')) {
+            return 'business';
+        } 
+        // Technology category - expanded keywords
+        else if (content.includes('tech') || content.includes('ai') || content.includes('artificial intelligence') || 
+                 content.includes('software') || content.includes('digital') || content.includes('computer') ||
+                 content.includes('internet') || content.includes('social media') || content.includes('app') ||
+                 content.includes('startup') || content.includes('innovation') || content.includes('cyber') ||
+                 content.includes('data') || content.includes('algorithm') || content.includes('platform')) {
+            return 'technology';
+        } 
+        // Sports category - expanded keywords
+        else if (content.includes('sport') || content.includes('football') || content.includes('basketball') || 
+                 content.includes('tennis') || content.includes('olympic') || content.includes('baseball') ||
+                 content.includes('soccer') || content.includes('golf') || content.includes('hockey') ||
+                 content.includes('championship') || content.includes('league') || content.includes('team') ||
+                 content.includes('player') || content.includes('coach') || content.includes('game')) {
+            return 'sports';
+        } 
+        // Entertainment category - expanded keywords
+        else if (content.includes('movie') || content.includes('film') || content.includes('entertainment') || 
+                 content.includes('celebrity') || content.includes('music') || content.includes('actor') ||
+                 content.includes('actress') || content.includes('director') || content.includes('award') ||
+                 content.includes('concert') || content.includes('album') || content.includes('show') ||
+                 content.includes('tv') || content.includes('television') || content.includes('streaming')) {
+            return 'entertainment';
+        } 
+        // Health category - expanded keywords
+        else if (content.includes('health') || content.includes('medical') || content.includes('covid') || 
+                 content.includes('vaccine') || content.includes('treatment') || content.includes('hospital') ||
+                 content.includes('doctor') || content.includes('patient') || content.includes('disease') ||
+                 content.includes('medicine') || content.includes('therapy') || content.includes('clinic') ||
+                 content.includes('surgery') || content.includes('drug') || content.includes('pharmaceutical')) {
+            return 'health';
+        } 
+        // Science category - expanded keywords
+        else if (content.includes('science') || content.includes('research') || content.includes('study') || 
+                 content.includes('discovery') || content.includes('climate') || content.includes('environment') ||
+                 content.includes('space') || content.includes('nasa') || content.includes('university') ||
+                 content.includes('experiment') || content.includes('laboratory') || content.includes('scientist') ||
+                 content.includes('innovation') || content.includes('breakthrough') || content.includes('analysis')) {
+            return 'science';
+        } 
+        // General category - everything else
+        else {
+            return 'general';
+        }
+    }
+
+    // Mock news data for demonstration
+    getMockNewsData() {
+        const currentDate = new Date();
+        const yesterday = new Date(currentDate);
+        yesterday.setDate(currentDate.getDate() - 1);
+        const twoDaysAgo = new Date(currentDate);
+        twoDaysAgo.setDate(currentDate.getDate() - 2);
+        
+        return [
+            {
+                id: 1,
+                title: "AI Breakthrough: New Model Achieves Human-Level Understanding",
+                description: "Researchers have developed a new artificial intelligence model that demonstrates unprecedented understanding of complex human language patterns and reasoning abilities.",
+                url: "https://example.com/ai-breakthrough",
+                urlToImage: "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400&h=300&fit=crop",
+                source: { name: "Tech Daily" },
+                publishedAt: currentDate.toISOString(),
+                category: "technology"
+            },
+            {
+                id: 2,
+                title: "Global Markets React to New Economic Policy Changes",
+                description: "Major stock markets worldwide showed significant movement following the announcement of new economic policies aimed at stabilizing inflation and promoting growth.",
+                url: "https://example.com/market-reaction",
+                urlToImage: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=300&fit=crop",
+                source: { name: "Business Weekly" },
+                publishedAt: yesterday.toISOString(),
+                category: "business"
+            },
+
+            {
+                id: 3,
+                title: "Championship Finals: Underdog Team Makes Historic Victory",
+                description: "In an unexpected turn of events, the underdog team secured a historic victory in the championship finals, marking their first title in over two decades.",
+                url: "https://example.com/championship-victory",
+                urlToImage: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop",
+                source: { name: "Sports Central" },
+                publishedAt: currentDate.toISOString(),
+                category: "sports"
+            },
+            {
+                id: 4,
+                title: "New Streaming Service Launches with Exclusive Content",
+                description: "A major entertainment company has launched a new streaming platform featuring exclusive original content and classic favorites from their extensive library.",
+                url: "https://example.com/streaming-launch",
+                urlToImage: "https://images.unsplash.com/photo-1598899134739-24c46f58b8c0?w=400&h=300&fit=crop",
+                source: { name: "Entertainment Now" },
+                publishedAt: yesterday.toISOString(),
+                category: "entertainment"
+            },
+            {
+                id: 5,
+                title: "Breakthrough in Cancer Treatment Shows Promising Results",
+                description: "Medical researchers have announced a breakthrough in cancer treatment that has shown promising results in early clinical trials, offering hope for patients worldwide.",
+                url: "https://example.com/cancer-breakthrough",
+                urlToImage: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1f?w=400&h=300&fit=crop",
+                source: { name: "Health Journal" },
+                publishedAt: twoDaysAgo.toISOString(),
+                category: "health"
+            },
+            {
+                id: 6,
+                title: "Space Mission Discovers Evidence of Water on Mars",
+                description: "NASA's latest Mars mission has discovered compelling evidence of water presence, potentially supporting theories about the planet's ability to sustain life.",
+                url: "https://example.com/mars-water-discovery",
+                urlToImage: "https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?w=400&h=300&fit=crop",
+                source: { name: "Science Daily" },
+                publishedAt: currentDate.toISOString(),
+                category: "science"
+            },
+            {
+                id: 7,
+                title: "Tech Giant Announces Revolutionary Smartphone Features",
+                description: "A leading technology company has unveiled its latest smartphone with revolutionary features including advanced AI capabilities and enhanced security measures.",
+                url: "https://example.com/smartphone-announcement",
+                urlToImage: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&h=300&fit=crop",
+                source: { name: "Tech Review" },
+                publishedAt: yesterday.toISOString(),
+                category: "technology"
+            },
+            {
+                id: 8,
+                title: "Renewable Energy Investment Reaches Record High",
+                description: "Global investment in renewable energy has reached an all-time high, with solar and wind power leading the transition to sustainable energy sources.",
+                url: "https://example.com/renewable-energy-investment",
+                urlToImage: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=400&h=300&fit=crop",
+                source: { name: "Green Business" },
+                publishedAt: twoDaysAgo.toISOString(),
+                category: "business"
+            },
+            {
+                id: 9,
+                title: "Major Climate Summit Addresses Global Warming Crisis",
+                description: "World leaders gathered at the annual climate summit to discuss urgent measures needed to combat global warming and reduce carbon emissions worldwide.",
+                url: "https://example.com/climate-summit",
+                urlToImage: "https://images.unsplash.com/photo-1569163137390-2108bdb5ed3c?w=400&h=300&fit=crop",
+                source: { name: "Global News" },
+                publishedAt: currentDate.toISOString(),
+                category: "science"
+            },
+            {
+                id: 10,
+                title: "Revolutionary Electric Vehicle Sets New Speed Record",
+                description: "A new electric vehicle has shattered previous speed records, demonstrating the rapid advancement of electric vehicle technology and performance capabilities.",
+                url: "https://example.com/electric-vehicle-record",
+                urlToImage: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400&h=300&fit=crop",
+                source: { name: "Auto Weekly" },
+                publishedAt: yesterday.toISOString(),
+                category: "technology"
+            },
+            {
+                id: 11,
+                title: "Mental Health Awareness Campaign Reaches Millions",
+                description: "A groundbreaking mental health awareness campaign has successfully reached millions of people, promoting understanding and support for mental health issues.",
+                url: "https://example.com/mental-health-campaign",
+                urlToImage: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=300&fit=crop",
+                source: { name: "Health Today" },
+                publishedAt: currentDate.toISOString(),
+                category: "health"
+            },
+            {
+                id: 12,
+                title: "Blockbuster Movie Breaks Box Office Records",
+                description: "The highly anticipated blockbuster movie has shattered box office records, becoming the highest-grossing film of the year within its opening weekend.",
+                url: "https://example.com/blockbuster-success",
+                urlToImage: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&h=300&fit=crop",
+                source: { name: "Cinema News" },
+                publishedAt: yesterday.toISOString(),
+                category: "entertainment"
+            }
+        ];
+    }
+
+    // Handle search functionality
+    handleSearch(query) {
+        this.searchQuery = query.toLowerCase().trim();
+        this.filterNews();
+    }
+
+    // Clear search
+    clearSearch() {
+        document.getElementById('searchInput').value = '';
+        this.searchQuery = '';
+        this.filterNews();
+    }
+
+    // Handle category filter
+    handleCategoryFilter(category) {
+        // Update active button
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        this.currentCategory = category;
+        this.filterNews();
+    }
+
+    // Filter news based on category and search
+    filterNews() {
+        this.filteredNews = this.newsData.filter(article => {
+            const matchesCategory = this.currentCategory === 'all' || 
+                                  article.category === this.currentCategory;
+            
+            const matchesSearch = this.searchQuery === '' ||
+                                article.title.toLowerCase().includes(this.searchQuery) ||
+                                article.description.toLowerCase().includes(this.searchQuery);
+            
+            return matchesCategory && matchesSearch;
+        });
+
+        this.renderNews();
+    }
+
+    // Render news articles
+    renderNews() {
+        const container = document.getElementById('newsContainer');
+        const noResults = document.getElementById('noResults');
+        
+        if (this.filteredNews.length === 0) {
+            container.innerHTML = '';
+            noResults.style.display = 'block';
+            return;
+        }
+
+        noResults.style.display = 'none';
+        
+        container.innerHTML = this.filteredNews.map(article => this.createNewsCard(article)).join('');
+    }
+
+    // Create individual news card HTML
+    createNewsCard(article) {
+        const publishedDate = new Date(article.publishedAt).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+
+        return `
+            <article class="news-card ${this.currentLayout === 'list' ? 'list-view' : ''}">
+                <img src="${article.urlToImage}" alt="${article.title}" class="card-image" 
+                     onerror="this.src='https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&h=300&fit=crop'">
+                <div class="card-content">
+                    <h3 class="card-title">${article.title}</h3>
+                    <p class="card-description">${article.description}</p>
+                    <div class="card-meta">
+                        <span class="card-source">${article.source.name}</span>
+                        <span class="card-date">${publishedDate}</span>
+                    </div>
+                    <a href="${article.url}" target="_blank" class="read-more">
+                        Read More <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+            </article>
+        `;
+    }
+
+    // Handle layout change
+    handleLayoutChange(layout) {
+        this.currentLayout = layout;
+        
+        // Update active button
+        document.querySelectorAll('.layout-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        // Update container class
+        const container = document.getElementById('newsContainer');
+        container.classList.toggle('list-view', layout === 'list');
+        
+        // Re-render news to apply new layout
+        this.renderNews();
+        
+        // Save layout preference
+        this.updateSetting('layout', layout);
+    }
+
+    // Toggle settings sidebar
+    toggleSettings() {
+        const sidebar = document.getElementById('settingsSidebar');
+        const overlay = document.getElementById('overlay');
+        
+        sidebar.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+
+    // Toggle theme (light/dark)
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-theme', newTheme);
+        this.updateSetting('theme', newTheme);
+        
+        // Update theme toggle icon
+        const themeIcon = document.querySelector('#themeToggle i');
+        themeIcon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+
+    // Update a setting and save to localStorage
+    updateSetting(key, value) {
+        this.settings[key] = value;
+        this.saveSettings();
+        this.applySettings();
+    }
+
+    // Apply current settings to the UI
+    applySettings() {
+        // Apply colors
+        document.documentElement.style.setProperty('--primary-color', this.settings.primaryColor);
+        document.documentElement.style.setProperty('--background-color', this.settings.backgroundColor);
+        
+        // Apply font family
+        document.documentElement.style.setProperty('--font-family', this.settings.fontFamily);
+        
+        // Apply font size
+        document.documentElement.style.setProperty('--font-size', `${this.settings.fontSize}px`);
+        
+        // Apply theme
+        document.documentElement.setAttribute('data-theme', this.settings.theme);
+        
+        // Apply layout
+        this.currentLayout = this.settings.layout;
+        const container = document.getElementById('newsContainer');
+        container.classList.toggle('list-view', this.currentLayout === 'list');
+        
+        // Update settings UI to reflect current values
+        this.updateSettingsUI();
+        
+        // Update theme toggle icon
+        const themeIcon = document.querySelector('#themeToggle i');
+        themeIcon.className = this.settings.theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+
+    // Update settings UI to reflect current values
+    updateSettingsUI() {
+        document.getElementById('primaryColor').value = this.settings.primaryColor;
+        document.getElementById('backgroundColor').value = this.settings.backgroundColor;
+        document.getElementById('fontFamily').value = this.settings.fontFamily;
+        document.getElementById('fontSize').value = this.settings.fontSize;
+        document.getElementById('fontSizeValue').textContent = `${this.settings.fontSize}px`;
+        
+        // Update layout buttons
+        document.querySelectorAll('.layout-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.layout === this.settings.layout);
+        });
+    }
+
+    // Load settings from localStorage
+    loadSettings() {
+        const defaultSettings = {
+            primaryColor: '#2563eb',
+            backgroundColor: '#ffffff',
+            fontFamily: 'Inter',
+            fontSize: 16,
+            theme: 'light',
+            layout: 'grid'
+        };
+
+        const savedSettings = localStorage.getItem('newsAggregatorSettings');
+        return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
+    }
+
+    // Save settings to localStorage
+    saveSettings() {
+        localStorage.setItem('newsAggregatorSettings', JSON.stringify(this.settings));
+    }
+
+    // Reset settings to default
+    resetSettings() {
+        const defaultSettings = {
+            primaryColor: '#2563eb',
+            backgroundColor: '#ffffff',
+            fontFamily: 'Inter',
+            fontSize: 16,
+            theme: 'light',
+            layout: 'grid'
+        };
+
+        this.settings = { ...defaultSettings };
+        this.saveSettings();
+        this.applySettings();
+        
+        // Reset category and search
+        this.currentCategory = 'all';
+        this.searchQuery = '';
+        document.getElementById('searchInput').value = '';
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.category === 'all');
+        });
+        
+        this.filterNews();
+    }
+
+    // Show/hide loading spinner
+    showLoading(show) {
+        const spinner = document.getElementById('loadingSpinner');
+        const container = document.getElementById('newsContainer');
+        
+        if (show) {
+            spinner.style.display = 'flex';
+            container.style.display = 'none';
+        } else {
+            spinner.style.display = 'none';
+            container.style.display = 'grid';
+        }
+    }
+
+    // Show error message
+    showError(message) {
+        const container = document.getElementById('newsContainer');
+        container.innerHTML = `
+            <div class="error-message" style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #ef4444;">
+                <i class="fas fa-exclamation-triangle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                <h3>Error</h3>
+                <p>${message}</p>
+            </div>
+        `;
+    }
+
+    // Show success message
+    showSuccessMessage(message) {
+        const container = document.getElementById('newsContainer');
+        container.innerHTML = `
+            <div class="success-message" style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #10b981;">
+                <i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                <h3>Success</h3>
+                <p>${message}</p>
+            </div>
+        `;
+    }
+}
+
+// Initialize the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new NewsAggregator();
+});
+
+// Add some utility functions for better user experience
+
+// Debounce function for search
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Add smooth scrolling for better UX
+document.addEventListener('DOMContentLoaded', () => {
+    // Smooth scroll to top when clicking on logo
+    document.querySelector('.logo').addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Ctrl/Cmd + K to focus search
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            document.getElementById('searchInput').focus();
+        }
+        
+        // Escape to close settings
+        if (e.key === 'Escape') {
+            const sidebar = document.getElementById('settingsSidebar');
+            if (sidebar.classList.contains('active')) {
+                sidebar.classList.remove('active');
+                document.getElementById('overlay').classList.remove('active');
+            }
+        }
+    });
+});
