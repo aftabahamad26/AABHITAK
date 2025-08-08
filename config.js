@@ -1,7 +1,8 @@
-
+import dotenv from 'dotenv';
+dotenv.config();
 const CONFIG = {
    
-    NEWS_API_KEY: 'bc06fd2dbd734a9d9e6b4a40f17c6079', // Get your free API key from https://newsapi.org/
+    NEWS_API_KEY: process.env.NEWS_API_KEY, // Get your free API key from https://newsapi.org/
     NEWS_API_URL: 'https://newsapi.org/v2/top-headlines',
     NEWS_API_COUNTRY: 'us', 
 
