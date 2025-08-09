@@ -16,7 +16,7 @@ app.get('/api/news', async (req, res) => {
 
     let url;
     if (mode === 'everything') {
-      const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const from = new Date(Date.now() - 10*24 * 60 * 60 * 1000).toISOString();
       url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=${encodeURIComponent(language)}&from=${encodeURIComponent(from)}&sortBy=publishedAt&pageSize=${encodeURIComponent(pageSize)}`;
     } else if (mode === 'bundle') {
       // Aggregate across multiple categories to increase volume

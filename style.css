@@ -65,20 +65,10 @@ body {
     font-size: var(--font-size-large);
     font-weight: 600;
     color: var(--primary-color);
-    text-decoration: none;
 }
 
 .logo i {
     font-size: 24px;
-}
-
-/* Ensure the logo link is never underlined in any state */
-.logo:link,
-.logo:visited,
-.logo:hover,
-.logo:active {
-    text-decoration: none;
-    color: var(--primary-color);
 }
 
 .header-controls {
